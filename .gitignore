@@ -25,6 +25,11 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+/hotdog_nothotdog
+/.vscode
+/lightning_logs
+playground.py
+playground.ipynb
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
