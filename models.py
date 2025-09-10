@@ -7,6 +7,7 @@ from torch import Tensor
 import torch
 from typing import Any
 from datasets import BaseBatch
+from pytorch_lightning.utilities import grad_norm
 
 class BaseLightningModule(pl.LightningModule):
     def __init__(
@@ -18,7 +19,12 @@ class BaseLightningModule(pl.LightningModule):
         
         self.partial_optimizer = optimizer
         self.partial_lr_scheduler = lr_scheduler
-        
+    
+    def on_before_optimizer_step(self, optimizer : Optimizer) -> None:
+        if self.global_step % 100 == 0: # log gradients every 100 steps
+            norms = grad_norm(self, norm_type=2)
+            self.log_dict(norms)
+    
     def forward(self, x : Any) -> Tensor:
         raise NotImplementedError("This method should be implemented in subclassses")
         
@@ -60,6 +66,7 @@ class ClassificationModel(BaseLightningModule):
         A base classification model that wraps around a network and provides training and validation steps.
         """
         super().__init__(optimizer=optimizer, lr_scheduler=lr_scheduler)
+        self.save_hyperparameters(ignore=['network', 'optimizer', 'lr_scheduler'])
         self.network = network
         self.loss_fn = torch.nn.BCEWithLogitsLoss()
         
@@ -73,3 +80,4 @@ class ClassificationModel(BaseLightningModule):
         y_hat = self.forward(x).flatten()
         loss = self.loss_fn(y_hat, y.float())
         return loss
+        
