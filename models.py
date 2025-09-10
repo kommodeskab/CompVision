@@ -2,11 +2,10 @@ import pytorch_lightning as pl
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from functools import partial
-from dataclasses import dataclass
 from torch import Tensor
 import torch
 from typing import Any
-from datasets import BaseBatch
+from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities import grad_norm
 
 class BaseLightningModule(pl.LightningModule):
@@ -19,24 +18,23 @@ class BaseLightningModule(pl.LightningModule):
         
         self.partial_optimizer = optimizer
         self.partial_lr_scheduler = lr_scheduler
-    
-    def on_before_optimizer_step(self, optimizer : Optimizer) -> None:
-        if self.global_step % 100 == 0: # log gradients every 100 steps
-            norms = grad_norm(self, norm_type=2)
-            self.log_dict(norms)
-    
+        
+    @property
+    def logger(self) -> TensorBoardLogger:
+        return self.trainer.logger
+
     def forward(self, x : Any) -> Tensor:
         raise NotImplementedError("This method should be implemented in subclassses")
         
-    def common_step(self, batch : BaseBatch, batch_idx : int):
+    def common_step(self, batch : dict[str, Tensor], batch_idx : int):
         raise NotImplementedError("This method should be implemented in subclasses.")
 
-    def training_step(self, batch : BaseBatch, batch_idx : int):
+    def training_step(self, batch : dict[str, Tensor], batch_idx : int):
         loss = self.common_step(batch, batch_idx)
         self.log('train_loss', loss, prog_bar=True)
         return loss
 
-    def validation_step(self, batch : BaseBatch, batch_idx : int):
+    def validation_step(self, batch : dict[str, Tensor], batch_idx : int):
         loss = self.common_step(batch, batch_idx)
         self.log('val_loss', loss, prog_bar=True)
         return loss
@@ -73,10 +71,8 @@ class ClassificationModel(BaseLightningModule):
     def forward(self, x : Tensor) -> Tensor:
         return self.network(x)
                 
-    def common_step(self, batch : BaseBatch, batch_idx : int):
+    def common_step(self, batch : dict[str, Tensor], batch_idx : int):
         x, y = batch['input'], batch['target']
-        x : Tensor 
-        y : Tensor
         y_hat = self.forward(x).flatten()
         loss = self.loss_fn(y_hat, y.float())
         return loss
