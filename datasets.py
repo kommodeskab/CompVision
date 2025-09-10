@@ -3,13 +3,6 @@ import os
 import glob
 from PIL import Image
 from torchvision import transforms
-from torch import Tensor
-from dataclasses import dataclass
-
-@dataclass
-class BaseBatch:
-    input: Tensor
-    target: Tensor
 
 class Hotdog_NotHotdog(Dataset):
     def __init__(self, train : bool, image_size : int = 32):
