@@ -11,5 +11,5 @@ Kør `main.py` for at lave et run. Tjek resultater af et run ved at taste: `tens
 * Rasmus: network architecture. Se fx på Resnet. Under transfer-learning, i.e. pretrained modeller.
 * Felix: data (transforms) + visualization.py (visualisering af billeder)
 * Nikolaj: "Compute the saliency map"  og "smoothgrad saliency map", prøv at plotte det, etc. 
-* Gustav: Kig på metrics. fx lav et Callback (pl.Callback) som beregner accuracy. Undersøg hvilke billeder bliver misclassified.
+* Gustav: Kig på metrics. fx lav et Callback (pl.Callback) som undersøger hvilke billeder bliver misclassified under træning. Man kan tilgå træningssættet inde i et callback ved: `pl_module.valset`.
 * Andreas: tech support
