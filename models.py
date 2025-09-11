@@ -7,6 +7,9 @@ import torch
 from typing import Any
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities import grad_norm
+from pytorch_lightning.utilities import grad_norm
+from dataloader import BaseDM
+from torch.utils.data import Dataset
 
 class BaseLightningModule(pl.LightningModule):
     def __init__(
@@ -19,24 +22,45 @@ class BaseLightningModule(pl.LightningModule):
         self.partial_optimizer = optimizer
         self.partial_lr_scheduler = lr_scheduler
         
+    def on_before_optimizer_step(self, optimizer : Optimizer) -> None:
+        if self.global_step % 100 == 0: # Log gradient norms every 100 steps
+            norms = grad_norm(self, norm_type=2)
+            self.log_dict(norms)
+        
     @property
     def logger(self) -> TensorBoardLogger:
         return self.trainer.logger
+    
+    @property
+    def datamodule(self) -> BaseDM:
+        return self.trainer.datamodule
+    
+    @property
+    def trainset(self) -> Dataset:
+        return self.datamodule.train_dataset
+
+    @property
+    def valset(self) -> Dataset:
+        return self.datamodule.val_dataset
 
     def forward(self, x : Any) -> Tensor:
         raise NotImplementedError("This method should be implemented in subclassses")
-        
-    def common_step(self, batch : dict[str, Tensor], batch_idx : int):
+    
+    def common_step(self, batch : dict[str, Tensor], batch_idx : int) -> dict[str, Tensor]:
         raise NotImplementedError("This method should be implemented in subclasses.")
 
-    def training_step(self, batch : dict[str, Tensor], batch_idx : int):
-        loss = self.common_step(batch, batch_idx)
-        self.log('train_loss', loss, prog_bar=True)
+    def training_step(self, batch : dict[str, Tensor], batch_idx : int) -> Tensor:
+        step = self.common_step(batch, batch_idx)
+        step = {f'train_{k}': v for k, v in step.items()}
+        loss = step['train_loss']
+        self.log_dict(step, prog_bar=True)
         return loss
 
-    def validation_step(self, batch : dict[str, Tensor], batch_idx : int):
-        loss = self.common_step(batch, batch_idx)
-        self.log('val_loss', loss, prog_bar=True)
+    def validation_step(self, batch : dict[str, Tensor], batch_idx : int) -> Tensor:
+        step = self.common_step(batch, batch_idx)
+        step = {f'val_{k}': v for k, v in step.items()}
+        loss = step['val_loss']
+        self.log_dict(step, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
@@ -75,5 +99,8 @@ class ClassificationModel(BaseLightningModule):
         x, y = batch['input'], batch['target']
         y_hat = self.forward(x).flatten()
         loss = self.loss_fn(y_hat, y.float())
-        return loss
-        
+        accuracy = ((y_hat > 0.0) == y.bool()).float().mean()
+        return {
+            'loss': loss,
+            'accuracy': accuracy
+        }
