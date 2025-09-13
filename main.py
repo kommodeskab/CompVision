@@ -5,6 +5,7 @@ på den måde kan man lave ændringer som ikke bliver tracket af git
 from dataloader import BaseDM
 from datasets import Hotdog_NotHotdog
 from networks import BaseClassifier
+from networks import ResNet18Binary
 from models import ClassificationModel
 from functools import partial
 from torch.optim import AdamW
@@ -13,7 +14,7 @@ from pytorch_lightning import Trainer
 
 
 if __name__ == "__main__":
-    IMAGE_SIZE=8
+    IMAGE_SIZE=224
     BATCH_SIZE=1
 
     train_dataset = Hotdog_NotHotdog(train=True, image_size=IMAGE_SIZE)
@@ -26,14 +27,15 @@ if __name__ == "__main__":
         'interval': 'epoch',
         'frequency': 1
     }
-
-    network = BaseClassifier(input_size=3*IMAGE_SIZE**2)
+    # print(IMAGE_SIZE)
+    # network = BaseClassifier(input_size=3*IMAGE_SIZE**2)
+    network = ResNet18Binary()
     model = ClassificationModel(
         network=network,
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
     )
-    datamodule = BaseDM(dataset=train_dataset, val_dataset=val_dataset, batch_size=BATCH_SIZE, num_workers=0)
-    trainer = Trainer(max_epochs=20, accelerator="cpu", log_every_n_steps=10)
+    datamodule = BaseDM(dataset=train_dataset, val_dataset=val_dataset, batch_size=BATCH_SIZE, num_workers=7) #change num_workers=7
+    trainer = Trainer(max_epochs=20, accelerator="gpu", log_every_n_steps=10)
     
     trainer.fit(model, datamodule=datamodule)
