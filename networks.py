@@ -24,7 +24,14 @@ class ResNet18Binary(nn.Module):
         super().__init__()
         self.model = resnet18(weights=ResNet18_Weights.DEFAULT)
         num_ftrs = self.model.fc.in_features #Number of features in the last layer
-        self.model.fc = nn.Linear(num_ftrs, 1) #Ensures that we have a single output and not 1000
+        self.model.fc = nn.Sequential(
+            nn.Linear(num_ftrs, 1024),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(1024, 512),
+            nn.ReLU(),
+            nn.Linear(512, 1)
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         return self.model(x)  
