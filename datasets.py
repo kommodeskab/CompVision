@@ -1,4 +1,4 @@
-'''Lille script til at plotte augmented data
+'''Lille (co-pilot) script til at plotte augmented data
 
 
 def show_augmented_images(dataset, num_images=8):
