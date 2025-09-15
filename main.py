@@ -10,6 +10,7 @@ from functools import partial
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from pytorch_lightning import Trainer
+import torch
 
 
 if __name__ == "__main__":
@@ -33,7 +34,15 @@ if __name__ == "__main__":
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
     )
+<<<<<<< Updated upstream
     datamodule = BaseDM(dataset=train_dataset, val_dataset=val_dataset, batch_size=BATCH_SIZE, num_workers=0)
     trainer = Trainer(max_epochs=20, accelerator="cpu", log_every_n_steps=10)
+=======
+    datamodule = BaseDM(dataset=train_dataset, val_dataset=val_dataset, batch_size=BATCH_SIZE, num_workers=7) #change num_workers=7
+    trainer = Trainer(max_epochs=1, log_every_n_steps=10)
+>>>>>>> Stashed changes
     
     trainer.fit(model, datamodule=datamodule)
+
+    save_path = "models/model_test"
+    torch.save(model.state_dict(), save_path)
