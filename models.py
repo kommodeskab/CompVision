@@ -7,6 +7,7 @@ import torch
 from typing import Any
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities import grad_norm
+from pytorch_lightning.utilities import grad_norm
 from dataloader import BaseDM
 from torch.utils.data import Dataset
 
@@ -87,6 +88,7 @@ class ClassificationModel(BaseLightningModule):
         A base classification model that wraps around a network and provides training and validation steps.
         """
         super().__init__(optimizer=optimizer, lr_scheduler=lr_scheduler)
+        self.save_hyperparameters(ignore=['network', 'optimizer', 'lr_scheduler'])
         self.network = network
         self.loss_fn = torch.nn.BCEWithLogitsLoss()
         
