@@ -8,12 +8,14 @@ class Hotdog_NotHotdog(Dataset):
     def __init__(self, train : bool, image_size : int = 32):
         if train:
             self.transform = transforms.Compose([
-                transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-                transforms.RandomRotation(degrees=10),
-                transforms.Resize((image_size, image_size)),
+                transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=(-0.2, 0.2)),
+                transforms.RandomGrayscale(p=0.05),
+                transforms.RandomRotation(degrees=20),
+                transforms.RandomResizedCrop((image_size, image_size), scale=(0.7, 1.0), ratio=(0.9, 1.1)),
                 transforms.RandomHorizontalFlip(0.5),
                 transforms.RandomVerticalFlip(0.2),
                 transforms.ToTensor(),
+                transforms.RandomErasing(p=0.2),
             ])
         else:
             self.transform = transforms.Compose([

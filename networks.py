@@ -28,9 +28,10 @@ class ResNet18Binary(nn.Module):
             nn.Linear(num_ftrs, 1024),
             nn.ReLU(),
             nn.Dropout(p=0.5),
-            nn.Linear(1024, 512),
+            nn.Linear(1024, 1024),
             nn.ReLU(),
-            nn.Linear(512, 1)
+            nn.Dropout(p=0.5),
+            nn.Linear(1024, 1)
         )
 
     def forward(self, x: Tensor) -> Tensor:

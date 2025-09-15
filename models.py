@@ -94,6 +94,10 @@ class ClassificationModel(BaseLightningModule):
         
     def forward(self, x : Tensor) -> Tensor:
         return self.network(x)
+    
+    def classify(self, x : Tensor) -> Tensor:
+        logits = self.forward(x)
+        return (logits > 0.0).long()
                 
     def common_step(self, batch : dict[str, Tensor], batch_idx : int):
         x, y = batch['input'], batch['target']
