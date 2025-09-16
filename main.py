@@ -36,7 +36,7 @@ if __name__ == "__main__":
     train_dataset = Hotdog_NotHotdog(train=True, image_size=IMAGE_SIZE)
     val_dataset = Hotdog_NotHotdog(train=False, image_size=IMAGE_SIZE)
 
-    optimizer = partial(AdamW, lr=1e-4, weight_decay=0.1)
+    optimizer = partial(AdamW, lr=1e-5, weight_decay=0.1)
     lr_scheduler = {
         'scheduler': partial(ReduceLROnPlateau, mode='min', factor=0.5, patience=20),
         'monitor': 'val_loss',

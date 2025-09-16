@@ -9,7 +9,7 @@ class Hotdog_NotHotdog(Dataset):
         if train:
             self.transform = transforms.Compose([
                 transforms.ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=(-0.2, 0.2)),
-                transforms.RandomGrayscale(p=0.05),
+                transforms.RandomGrayscale(p=0.1),
                 transforms.RandomRotation(degrees=20),
                 transforms.RandomResizedCrop((image_size, image_size), scale=(0.7, 1.0), ratio=(0.9, 1.1)),
                 transforms.RandomHorizontalFlip(0.5),
