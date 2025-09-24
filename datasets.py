@@ -3,6 +3,7 @@ import os
 import glob
 from PIL import Image
 from torchvision import transforms
+from torchvision.transforms.v2 import GaussianNoise
 
 class Hotdog_NotHotdog(Dataset):
     def __init__(self, train : bool, image_size : int = 32):
@@ -15,6 +16,7 @@ class Hotdog_NotHotdog(Dataset):
                 transforms.RandomHorizontalFlip(0.5),
                 transforms.RandomVerticalFlip(0.2),
                 transforms.ToTensor(),
+                GaussianNoise(0., 0.001),
                 transforms.RandomErasing(p=0.2),
             ])
         else:
@@ -38,7 +40,7 @@ class Hotdog_NotHotdog(Dataset):
         c = os.path.split(os.path.split(image_path)[0])[1]
         y = self.name_to_label[c]
         X = self.transform(image)
-        X = 2 * X - 1
+        X = (2 * X - 1).clamp(-1, 1)
         return {
             'input': X,
             'target': y,
