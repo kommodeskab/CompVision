@@ -10,6 +10,7 @@ from pytorch_lightning.utilities import grad_norm
 from pytorch_lightning.utilities import grad_norm
 from dataloader import BaseDM
 from torch.utils.data import Dataset
+import torch.nn as nn
 
 class BaseLightningModule(pl.LightningModule):
     def __init__(
@@ -80,7 +81,7 @@ class BaseLightningModule(pl.LightningModule):
 class ClassificationModel(BaseLightningModule):
     def __init__(
         self,
-        network : pl.LightningModule,
+        network : nn.Module,
         optimizer : partial | None = None,
         lr_scheduler : dict[str, partial[LRScheduler] | str] | None = None,
         ):
