@@ -11,6 +11,33 @@ from pytorch_lightning.utilities import grad_norm
 from dataloader import BaseDM
 from torch.utils.data import Dataset
 import torch.nn as nn
+import random
+import numpy as np
+from contextlib import contextmanager
+
+@contextmanager
+def temp_seed(seed : int):
+    # temporarily set the random seed for reproducibility
+    # and restore the original state afterwards
+    random_state = random.getstate()
+    np_state = np.random.get_state()
+    torch_state = torch.get_rng_state()
+    cuda_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+        
+    try:
+        yield
+    finally:
+        random.setstate(random_state)
+        np.random.set_state(np_state)
+        torch.set_rng_state(torch_state)
+        if torch.cuda.is_available() and cuda_state is not None:
+            torch.cuda.set_rng_state_all(cuda_state)
 
 class BaseLightningModule(pl.LightningModule):
     def __init__(
@@ -27,7 +54,7 @@ class BaseLightningModule(pl.LightningModule):
         if self.global_step % 100 == 0: # Log gradient norms every 100 steps
             norms = grad_norm(self, norm_type=2)
             self.log_dict(norms)
-        
+
     @property
     def logger(self) -> TensorBoardLogger:
         return self.trainer.logger
@@ -58,7 +85,8 @@ class BaseLightningModule(pl.LightningModule):
         return loss
 
     def validation_step(self, batch : dict[str, Tensor], batch_idx : int) -> Tensor:
-        step = self.common_step(batch, batch_idx)
+        with temp_seed(0):
+            step = self.common_step(batch, batch_idx)
         step = {f'val_{k}': v for k, v in step.items()}
         loss = step['val_loss']
         self.log_dict(step, prog_bar=True)
