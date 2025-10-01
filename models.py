@@ -4,7 +4,7 @@ from torch.optim.lr_scheduler import LRScheduler
 from functools import partial
 from torch import Tensor
 import torch
-from typing import Any
+from typing import Any, Dict, Tuple
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities import grad_norm
 from pytorch_lightning.utilities import grad_norm
@@ -14,6 +14,8 @@ import torch.nn as nn
 import random
 import numpy as np
 from contextlib import contextmanager
+    
+Data = Dict[str, Tensor]
 
 @contextmanager
 def temp_seed(seed : int):
@@ -71,20 +73,20 @@ class BaseLightningModule(pl.LightningModule):
     def valset(self) -> Dataset:
         return self.datamodule.val_dataset
 
-    def forward(self, x : Any) -> Tensor:
+    def forward(self, *x : Any) -> Tensor:
         raise NotImplementedError("This method should be implemented in subclassses")
-    
-    def common_step(self, batch : dict[str, Tensor], batch_idx : int) -> dict[str, Tensor]:
+
+    def common_step(self, batch : Data, batch_idx : int) -> Data:
         raise NotImplementedError("This method should be implemented in subclasses.")
 
-    def training_step(self, batch : dict[str, Tensor], batch_idx : int) -> Tensor:
+    def training_step(self, batch : Data, batch_idx : int) -> Tensor:
         step = self.common_step(batch, batch_idx)
         step = {f'train_{k}': v for k, v in step.items()}
         loss = step['train_loss']
         self.log_dict(step, prog_bar=True)
         return loss
 
-    def validation_step(self, batch : dict[str, Tensor], batch_idx : int) -> Tensor:
+    def validation_step(self, batch : Data, batch_idx : int) -> Tensor:
         with temp_seed(0):
             step = self.common_step(batch, batch_idx)
         step = {f'val_{k}': v for k, v in step.items()}
@@ -128,7 +130,7 @@ class ClassificationModel(BaseLightningModule):
         logits = self.forward(x)
         return (logits > 0.0).long()
                 
-    def common_step(self, batch : dict[str, Tensor], batch_idx : int):
+    def common_step(self, batch : Data, batch_idx : int):
         x, y = batch['input'], batch['target']
         y_hat = self.forward(x).flatten()
         loss = self.loss_fn(y_hat, y.float())
