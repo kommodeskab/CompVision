@@ -4,17 +4,21 @@ import pandas as pd
 from PIL import Image
 import torch
 from torchvision import transforms as T
-from typing import Optional
-from models import Data
+from typing import Optional, Literal
+from utils import Data
+import torch.nn.functional as F
+
+Splits = Literal['train', 'val', 'test']
 
 class FrameImageDataset(torch.utils.data.Dataset):
     def __init__(self, 
         root_dir : str = '/work3/ppar/data/ucf101',
-        split : str = 'train', 
+        split : Splits = 'train', 
         transform : Optional[T.Compose] = None
     ):
         self.frame_paths = sorted(glob(f'{root_dir}/frames/{split}/*/*/*.jpg'))
         self.df = pd.read_csv(f'{root_dir}/metadata/{split}.csv')
+        self.num_classes = self.df['label'].nunique()
         self.split = split
         self.transform = transform
        
@@ -28,7 +32,8 @@ class FrameImageDataset(torch.utils.data.Dataset):
         frame_path = self.frame_paths[idx]
         video_name = frame_path.split('/')[-2]
         video_meta = self._get_meta('video_name', video_name)
-        label = video_meta['label']
+        label = torch.tensor(video_meta['label'].item())
+        target = F.one_hot(label, num_classes=self.num_classes)
         
         frame = Image.open(frame_path).convert("RGB")
 
@@ -39,22 +44,21 @@ class FrameImageDataset(torch.utils.data.Dataset):
 
         return {
             "input": frame,
-            "target": label
+            "target": target
         }
 
 class FrameVideoDataset(torch.utils.data.Dataset):
     def __init__(
         self, 
         root_dir : str = '/work3/ppar/data/ucf101', 
-        split : str = 'train', 
+        split : Splits = 'train', 
         transform : Optional[T.Compose] = None,
-        stack_frames : bool = True
     ):
         self.video_paths = sorted(glob(f'{root_dir}/videos/{split}/*/*.avi'))
         self.df = pd.read_csv(f'{root_dir}/metadata/{split}.csv')
+        self.num_classes = self.df['label'].nunique()
         self.split = split
         self.transform = transform
-        self.stack_frames = stack_frames
         
         self.n_sampled_frames = 10
 
@@ -68,7 +72,8 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         video_path = self.video_paths[idx]
         video_name = video_path.split('/')[-1].split('.avi')[0]
         video_meta = self._get_meta('video_name', video_name)
-        label = video_meta['label']
+        label = torch.tensor(video_meta['label'].item())
+        target = F.one_hot(label, num_classes=self.num_classes)
 
         video_frames_dir = self.video_paths[idx].split('.avi')[0].replace('videos', 'frames')
         video_frames = self.load_frames(video_frames_dir)
@@ -78,12 +83,11 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         else:
             frames = [T.ToTensor()(frame) for frame in video_frames]
         
-        if self.stack_frames:
-            frames = torch.stack(frames).permute(1, 0, 2, 3)
+        frames = torch.stack(frames).permute(1, 0, 2, 3)
 
         return {
             "input": frames,
-            "target": label
+            "target": target
         }
 
     def load_frames(self, frames_dir : str) -> list[Image.Image]:
@@ -94,30 +98,3 @@ class FrameVideoDataset(torch.utils.data.Dataset):
             frames.append(frame)
 
         return frames
-
-
-if __name__ == '__main__':
-    from torch.utils.data import DataLoader
-
-    root_dir = '/work3/ppar/data/ucf101'
-
-    transform = T.Compose([T.Resize((64, 64)),T.ToTensor()])
-    frameimage_dataset = FrameImageDataset(root_dir=root_dir, split='val', transform=transform)
-    framevideostack_dataset = FrameVideoDataset(root_dir=root_dir, split='val', transform=transform, stack_frames = True)
-    framevideolist_dataset = FrameVideoDataset(root_dir=root_dir, split='val', transform=transform, stack_frames = False)
-
-
-    frameimage_loader = DataLoader(frameimage_dataset,  batch_size=8, shuffle=False)
-    framevideostack_loader = DataLoader(framevideostack_dataset,  batch_size=8, shuffle=False)
-    framevideolist_loader = DataLoader(framevideolist_dataset,  batch_size=8, shuffle=False)
-
-    # for frames, labels in frameimage_loader:
-    #     print(frames.shape, labels.shape) # [batch, channels, height, width]
-
-    # for video_frames, labels in framevideolist_loader:
-    #     print(45*'-')
-    #     for frame in video_frames: # loop through number of frames
-    #         print(frame.shape, labels.shape)# [batch, channels, height, width]
-
-    for video_frames, labels in framevideostack_loader:
-        print(video_frames.shape, labels.shape) # [batch, channels, number of frames, height, width]

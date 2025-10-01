@@ -1,8 +1,9 @@
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split, Dataset
 import os
+from utils import Data, DatasetType, DataLoaderType
 
-def split_dataset(train_dataset : Dataset, val_dataset : Dataset | None, train_val_split : float) -> tuple[Dataset, Dataset]:
+def split_dataset(train_dataset : DatasetType, val_dataset : DatasetType | None, train_val_split : float) -> tuple[DatasetType, DatasetType]:
     if val_dataset is None:
         return random_split(train_dataset, [train_val_split, 1 - train_val_split])
     else:
@@ -27,8 +28,8 @@ class BaseDM(pl.LightningDataModule):
         self.num_workers = kwargs.pop("num_workers", os.cpu_count())
         print(f"Using {self.num_workers} workers for data loading.")
         self.kwargs = kwargs
-        
-    def train_dataloader(self):
+
+    def train_dataloader(self) -> DataLoaderType:
         return DataLoader(
             dataset = self.train_dataset, 
             shuffle = True, 
@@ -36,8 +37,8 @@ class BaseDM(pl.LightningDataModule):
             num_workers=self.num_workers,
             **self.kwargs,
             )
-        
-    def val_dataloader(self):
+
+    def val_dataloader(self) -> DataLoaderType:
         return DataLoader(
             dataset = self.val_dataset, 
             shuffle = False, 

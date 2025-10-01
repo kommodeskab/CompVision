@@ -4,16 +4,17 @@ from torch.optim.lr_scheduler import LRScheduler
 from functools import partial
 from torch import Tensor
 import torch
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities import grad_norm
 from pytorch_lightning.utilities import grad_norm
 from dataloader import BaseDM
-from torch.utils.data import Dataset
 import torch.nn as nn
 import random
 import numpy as np
 from contextlib import contextmanager
+from losses import BaseLoss
+from utils import DatasetType
     
 Data = Dict[str, Tensor]
 
@@ -66,33 +67,37 @@ class BaseLightningModule(pl.LightningModule):
         return self.trainer.datamodule
     
     @property
-    def trainset(self) -> Dataset:
+    def trainset(self) -> DatasetType:
         return self.datamodule.train_dataset
 
     @property
-    def valset(self) -> Dataset:
+    def valset(self) -> DatasetType:
         return self.datamodule.val_dataset
 
     def forward(self, *x : Any) -> Tensor:
-        raise NotImplementedError("This method should be implemented in subclassses")
+        raise NotImplementedError
 
     def common_step(self, batch : Data, batch_idx : int) -> Data:
-        raise NotImplementedError("This method should be implemented in subclasses.")
+        raise NotImplementedError
+    
+    def step_and_log(self, batch : Data, batch_idx : int, prefix : str) -> Tensor:
+        step = self.common_step(batch, batch_idx)
+        step = {f'{prefix}_{k}': v for k, v in step.items()}
+        loss = step.pop(f'{prefix}_loss')
+        self.log(f"{prefix}_loss", loss, prog_bar=True)
+        self.log_dict(step, prog_bar=False)
+        return loss
 
     def training_step(self, batch : Data, batch_idx : int) -> Tensor:
-        step = self.common_step(batch, batch_idx)
-        step = {f'train_{k}': v for k, v in step.items()}
-        loss = step['train_loss']
-        self.log_dict(step, prog_bar=True)
-        return loss
+        return self.step_and_log(batch, batch_idx, 'train')
 
     def validation_step(self, batch : Data, batch_idx : int) -> Tensor:
         with temp_seed(0):
-            step = self.common_step(batch, batch_idx)
-        step = {f'val_{k}': v for k, v in step.items()}
-        loss = step['val_loss']
-        self.log_dict(step, prog_bar=True)
-        return loss
+            return self.step_and_log(batch, batch_idx, 'val')
+
+    def test_step(self, batch : Data, batch_idx : int) -> Tensor:
+        with temp_seed(0):
+            return self.step_and_log(batch, batch_idx, 'test')
 
     def configure_optimizers(self):
         assert self.partial_optimizer is not None, "Optimizer must be provided during training."
@@ -108,34 +113,44 @@ class BaseLightningModule(pl.LightningModule):
             }
         }
         
+from utils import OptimizerType, LRSchedulerType
+        
 class ClassificationModel(BaseLightningModule):
     def __init__(
         self,
         network : nn.Module,
-        optimizer : partial | None = None,
-        lr_scheduler : dict[str, partial[LRScheduler] | str] | None = None,
+        loss_fn : Optional[BaseLoss] = None,
+        optimizer : OptimizerType = None,
+        lr_scheduler : LRSchedulerType = None,
         ):
         """
         A base classification model that wraps around a network and provides training and validation steps.
         """
         super().__init__(optimizer=optimizer, lr_scheduler=lr_scheduler)
-        self.save_hyperparameters(ignore=['network', 'optimizer', 'lr_scheduler'])
         self.network = network
-        self.loss_fn = torch.nn.BCEWithLogitsLoss()
+        self.loss_fn = loss_fn
+        
+    @property
+    def example_input_array(self):
+        return self.trainset[0]['input'].unsqueeze(0)
         
     def forward(self, x : Tensor) -> Tensor:
         return self.network(x)
     
     def classify(self, x : Tensor) -> Tensor:
         logits = self.forward(x)
-        return (logits > 0.0).long()
-                
+        if logits.shape[-1] == 1:
+            # binary classification
+            return (logits > 0.0).flatten().long()
+
+        # multi class classification
+        return logits.argmax(dim=-1)
+
     def common_step(self, batch : Data, batch_idx : int):
         x, y = batch['input'], batch['target']
-        y_hat = self.forward(x).flatten()
-        loss = self.loss_fn(y_hat, y.float())
-        accuracy = ((y_hat > 0.0) == y.bool()).float().mean()
-        return {
-            'loss': loss,
-            'accuracy': accuracy
-        }
+        out = self.forward(x)
+        loss = self.loss_fn({
+            'output': out,
+            'target': y.float()
+        })
+        return loss
