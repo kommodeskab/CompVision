@@ -10,15 +10,23 @@ import torch.nn.functional as F
 
 Splits = Literal['train', 'val', 'test']
 
+def get_root_dir(leakage: bool = False) -> str:
+    if leakage:
+        return "/dtu/datasets1/02516/ucf10"
+    else:
+        return "/dtu/datasets1/02516/ucf101_noleakage"
+
 class FrameImageDataset(torch.utils.data.Dataset):
-    def __init__(self, 
-        root_dir : str = '/work3/ppar/data/ucf101',
+    def __init__(self,
+        leakage : bool = False,
         split : Splits = 'train', 
         transform : Optional[T.Compose] = None
-    ):
+    ):  
+        root_dir = get_root_dir(leakage)
         self.frame_paths = sorted(glob(f'{root_dir}/frames/{split}/*/*/*.jpg'))
         self.df = pd.read_csv(f'{root_dir}/metadata/{split}.csv')
-        self.num_classes = self.df['label'].nunique()
+        self.label_to_action = self.df.set_index('label')['action'].to_dict()
+        self.num_classes = len(self.label_to_action)
         self.split = split
         self.transform = transform
        
@@ -44,19 +52,22 @@ class FrameImageDataset(torch.utils.data.Dataset):
 
         return {
             "input": frame,
-            "target": target
+            "target": target,
+            "label": label
         }
 
 class FrameVideoDataset(torch.utils.data.Dataset):
     def __init__(
         self, 
-        root_dir : str = '/work3/ppar/data/ucf101', 
+        leakage : bool = False,
         split : Splits = 'train', 
         transform : Optional[T.Compose] = None,
     ):
+        root_dir = get_root_dir(leakage)
         self.video_paths = sorted(glob(f'{root_dir}/videos/{split}/*/*.avi'))
         self.df = pd.read_csv(f'{root_dir}/metadata/{split}.csv')
-        self.num_classes = self.df['label'].nunique()
+        self.label_to_action = self.df.set_index('label')['action'].to_dict()
+        self.num_classes = len(self.label_to_action)
         self.split = split
         self.transform = transform
         
@@ -87,7 +98,8 @@ class FrameVideoDataset(torch.utils.data.Dataset):
 
         return {
             "input": frames,
-            "target": target
+            "target": target,
+            "label": label
         }
 
     def load_frames(self, frames_dir : str) -> list[Image.Image]:

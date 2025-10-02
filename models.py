@@ -68,36 +68,40 @@ class BaseLightningModule(pl.LightningModule):
     
     @property
     def trainset(self) -> DatasetType:
-        return self.datamodule.train_dataset
+        return self.datamodule.trainset
 
     @property
     def valset(self) -> DatasetType:
-        return self.datamodule.val_dataset
+        return self.datamodule.valset
+
+    @property
+    def testset(self) -> DatasetType:
+        return self.datamodule.testset
 
     def forward(self, *x : Any) -> Tensor:
         raise NotImplementedError
 
     def common_step(self, batch : Data, batch_idx : int) -> Data:
         raise NotImplementedError
-    
-    def step_and_log(self, batch : Data, batch_idx : int, prefix : str) -> Tensor:
-        step = self.common_step(batch, batch_idx)
-        step = {f'{prefix}_{k}': v for k, v in step.items()}
-        loss = step.pop(f'{prefix}_loss')
-        self.log(f"{prefix}_loss", loss, prog_bar=True)
-        self.log_dict(step, prog_bar=False)
-        return loss
 
+    def log_loss(self, step: Data, prefix: str) -> Tensor:
+        step = {f'{prefix}_{k}': v for k, v in step.items()}
+        self.log_dict(step, prog_bar=True)
+        return step[f'{prefix}_loss']
+    
     def training_step(self, batch : Data, batch_idx : int) -> Tensor:
-        return self.step_and_log(batch, batch_idx, 'train')
+        step = self.common_step(batch, batch_idx)
+        return self.log_loss(step, 'train')
 
     def validation_step(self, batch : Data, batch_idx : int) -> Tensor:
         with temp_seed(0):
-            return self.step_and_log(batch, batch_idx, 'val')
+            step = self.common_step(batch, batch_idx)
+        return self.log_loss(step, 'val')
 
     def test_step(self, batch : Data, batch_idx : int) -> Tensor:
         with temp_seed(0):
-            return self.step_and_log(batch, batch_idx, 'test')
+            step = self.common_step(batch, batch_idx)
+        return self.log_loss(step, 'test')
 
     def configure_optimizers(self):
         assert self.partial_optimizer is not None, "Optimizer must be provided during training."

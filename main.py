@@ -23,34 +23,44 @@ from pytorch_lightning.callbacks import (
     ModelCheckpoint,
 )
 import pytorch_lightning
+from utils import get_timestamp
+
 
 if __name__ == "__main__":
     argparser = ArgumentParser()
     argparser.add_argument("--image_size", type=int, required=True)
+    argparser.add_argument("--leakage", type=bool, default=False)
     argparser.add_argument("--batch_size", type=int, required=True)
     argparser.add_argument("--optimizer", type=str, required=True, choices=["adamw", "sgd"])
-    argparser.add_argument("--name", type=str, default="experiment")
+    argparser.add_argument("--experiment", type=str, required=True, choices=["image_model", "late_fusion", "early_fusion", "3d_cnn"])
     argparser.add_argument("--num_workers", type=int, default=12)
     args = argparser.parse_args()
-    
-    trainset = FrameImageDataset(
-        root_dir="/dtu/datasets1/02516/ucf101_noleakage/", 
-        split="train"
-        )
-    valset = FrameImageDataset(
-        root_dir="/dtu/datasets1/02516/ucf101_noleakage/", 
-        split="val"
-        )
+
+    if args.experiment == "image_model":
+        # image model trains on individual images, therefore we use FrameImageDataset
+        trainset = FrameImageDataset(leakage=args.leakage, split="train")
+        valset = FrameImageDataset(leakage=args.leakage, split="val")
+    else:
+        # all other models trains on full videos, therefore we use FrameVideoDataset
+        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
+        valset = FrameVideoDataset(leakage=args.leakage, split="val")
+
+    # we test all models on video
+    testset = FrameVideoDataset(leakage=args.leakage, split="test")
+
     datamodule = BaseDM(
-        dataset=trainset, 
-        val_dataset=valset, 
-        num_workers=args.num_workers, 
+        trainset=trainset,
+        valset=valset,
+        testset=testset,
+        num_workers=args.num_workers,
         batch_size=args.batch_size
         )
+    
     network = ResNet18Binary(
         num_classes=trainset.num_classes,
         hidden_size=128,
         )
+    
     loss_fn = CrossEntropyWithLogitsLoss(
         report_top_k=3
         )
@@ -83,7 +93,12 @@ if __name__ == "__main__":
         Timer(),
     ]
     
-    logger = TensorBoardLogger('lightning_logs', name=args.name, log_graph=False)
+    logger = TensorBoardLogger(
+        'lightning_logs', 
+        name=args.experiment, 
+        version=get_timestamp(),
+        log_graph=False
+        )
     
     trainer = Trainer(
         max_epochs=200, 
