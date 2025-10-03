@@ -94,7 +94,7 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         else:
             frames = [T.ToTensor()(frame) for frame in video_frames]
         
-        frames = torch.stack(frames).permute(1, 0, 2, 3)
+        frames = torch.stack(frames)
 
         return {
             "input": frames,

@@ -82,13 +82,18 @@ class BaseLightningModule(pl.LightningModule):
         raise NotImplementedError
 
     def common_step(self, batch : Data, batch_idx : int) -> Data:
+        """
+        Should return the loss as a dictionary for the given batch.
+        The loss dictionary can contain multiply keys for logging, 
+        but gradient steps will be taken on the value with the key 'loss'
+        """
         raise NotImplementedError
 
-    def log_loss(self, step: Data, prefix: str) -> Tensor:
-        step = {f'{prefix}_{k}': v for k, v in step.items()}
-        self.log_dict(step, prog_bar=True)
-        return step[f'{prefix}_loss']
-    
+    def log_loss(self, loss: Data, prefix: str) -> Tensor:
+        loss = {f'{prefix}_{k}': v for k, v in loss.items()}
+        self.log_dict(loss, prog_bar=True)
+        return loss[f'{prefix}_loss']
+
     def training_step(self, batch : Data, batch_idx : int) -> Tensor:
         step = self.common_step(batch, batch_idx)
         return self.log_loss(step, 'train')
@@ -150,11 +155,31 @@ class ClassificationModel(BaseLightningModule):
         # multi class classification
         return logits.argmax(dim=-1)
 
-    def common_step(self, batch : Data, batch_idx : int):
+    def common_step(self, batch : Data, batch_idx : int) -> Data:
         x, y = batch['input'], batch['target']
         out = self.forward(x)
         loss = self.loss_fn({
             'output': out,
             'target': y.float()
         })
+        return loss
+
+class PerFrameClassificationModel(ClassificationModel):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+    def test_step(self, batch : Data, batch_idx : int) -> Tensor:
+        # test batches are videos of shape (B, T, C, H, W)
+        # we will use our image classification model to classify each frame
+        # the final result is then obtained by averaging the predictions across all frames
+        x, y = batch['input'], batch['target']
+        B, T, *rest = x.shape
+        x = x.view(-1, *rest) # flatten the temporal dimension
+        out = self.forward(x) # process all frames in parallel
+        out = out.view(B, T, -1).mean(dim=1) # average the predictions across all frames
+        loss = self.loss_fn({
+            'output': out,
+            'target': y.float()
+        })
+        loss = self.log_loss(loss, 'test')
         return loss

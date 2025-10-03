@@ -2,8 +2,13 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader, random_split, Dataset
 import os
 from utils import DatasetType, DataLoaderType
+from typing import Optional
 
-def split_dataset(train_dataset : DatasetType, val_dataset : DatasetType | None, train_val_split : float) -> tuple[DatasetType, DatasetType]:
+def split_dataset(
+    train_dataset : DatasetType, 
+    val_dataset : Optional[DatasetType] = None, 
+    train_val_split : Optional[float] = None,
+    ) -> tuple[DatasetType, DatasetType]:
     if val_dataset is None:
         return random_split(train_dataset, [train_val_split, 1 - train_val_split])
     else:
@@ -12,10 +17,10 @@ def split_dataset(train_dataset : DatasetType, val_dataset : DatasetType | None,
 class BaseDM(pl.LightningDataModule):
     def __init__(
         self,
-        trainset : Dataset,
-        valset : Dataset | None = None,
-        testset : Dataset | None = None,
-        train_val_split : float = 0.95,
+        trainset : DatasetType,
+        valset : Optional[DatasetType] = None,
+        testset : Optional[DatasetType] = None,
+        train_val_split : Optional[float] = None,
         **kwargs
         ):
         """
