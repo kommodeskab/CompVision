@@ -1,5 +1,5 @@
 import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, no_grad
 from torchvision.models import resnet18, ResNet18_Weights
 
 class BaseClassifier(nn.Module):
@@ -40,4 +40,57 @@ class ResNet18Binary(nn.Module):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        return self.model(x)  
+        return self.model(x)
+
+class ResNet18LateFusion(nn.Module):
+    def __init__(
+        self,
+        num_classes: int = 2,
+        num_frames: int = 8,
+        hidden_size: int = 512,
+        fusion: str = "avg",  # 'avg', 'concat', or 'mlp'
+    ):
+        super().__init__()
+        # Load pretrained ResNet backbone
+        base_model = resnet18(weights=ResNet18_Weights.DEFAULT)
+        num_ftrs = base_model.fc.in_features
+        
+        # Remove the classifier head
+        self.feature_extractor = nn.Sequential(*list(base_model.children())[:-1])  # up to avgpool
+        self.feature_extractor.eval()  # optionally freeze
+        
+        # Define fusion strategy
+        self.fusion = fusion
+
+        # Define classifier head (after fusion)
+        fusion_input_size = num_ftrs * num_frames
+        out_features = 1 if num_classes == 2 else num_classes
+
+        self.classifier = nn.Sequential(
+            nn.Linear(fusion_input_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(hidden_size, out_features)
+        )
+
+    def forward(self, x):
+        """
+        x: (B, T, 3, H, W)  — batch of videos
+        """
+        B, T, C, H, W = x.shape
+
+        # Extract per-frame features
+        x = x.view(B * T, C, H, W)              # flatten frames into batch dimension
+        with no_grad():                   # freeze CNN if desired
+            feats = self.feature_extractor(x)   # (B*T, 512, 1, 1)
+        feats = feats.view(B, T, -1)            # (B, T, 512)
+
+        # Fuse features over time
+        fused = feats.view(B, -1)           # (B, T*512)
+
+        # Classify
+        out = self.classifier(fused)
+        return out
