@@ -19,7 +19,7 @@ def extract_numbers(filepath : str) -> int:
 
 def get_root_dir(leakage: bool = False) -> str:
     if leakage:
-        return "/dtu/datasets1/02516/ucf10"
+        return "/dtu/datasets1/02516/ufc10"
     else:
         return "/dtu/datasets1/02516/ucf101_noleakage"
 
@@ -70,6 +70,7 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         split : Splits = 'train', 
         transform : Optional[T.Compose] = None,
     ):
+        self.leakage = leakage
         self.root_dir = get_root_dir(leakage)
         self.video_paths = sorted(glob(f'{self.root_dir}/videos/{split}/*/*.avi'))
         self.df = pd.read_csv(f'{self.root_dir}/metadata/{split}.csv')
@@ -104,12 +105,16 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         frames = torch.stack(frames)
         
         # also load optical flows
-        flow_path = video_meta.video_path.item()[:-4]
-        flow_path = f"{self.root_dir}/flows/{self.split}/{flow_path}"
-        flow_files = glob(f"{flow_path}/*")
-        flow_files = sorted(flow_files, key=extract_numbers)
-        flows = np.stack([np.load(f) for f in flow_files])
-        flows = torch.from_numpy(flows)
+        if not self.leakage:
+            flow_path = video_meta.video_path.item()[:-4]
+            flow_path = f"{self.root_dir}/flows/{self.split}/{flow_path}"
+            flow_files = glob(f"{flow_path}/*")
+            flow_files = sorted(flow_files, key=extract_numbers)
+            flows = np.stack([np.load(f) for f in flow_files])
+            flows = torch.from_numpy(flows)
+        else:
+            # there are no optical flows for the dataset with leakage
+            flows = None
 
         return {
             "input": frames,
@@ -126,3 +131,9 @@ class FrameVideoDataset(torch.utils.data.Dataset):
             frames.append(frame)
 
         return frames
+    
+if __name__ == "__main__":
+    dataset = FrameVideoDataset(leakage=False, split='train')
+    print(f"Dataset size: {len(dataset)}")
+    sample = dataset[0]
+    print(sample)

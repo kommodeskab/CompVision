@@ -27,7 +27,7 @@ from utils import get_timestamp
 
 if __name__ == "__main__":
     argparser = ArgumentParser()
-    argparser.add_argument("--leakage", type=bool, default=False)
+    argparser.add_argument("--leakage", action="store_true", help="enable leakage (default: False)")
     argparser.add_argument("--batch_size", type=int, required=True)
     argparser.add_argument("--optimizer", type=str, required=True, choices=["adamw", "sgd"])
     argparser.add_argument("--experiment", type=str, required=True, choices=["per_frame", "late_fusion", "early_fusion", "3d_cnn", "two_stream"])
@@ -71,6 +71,7 @@ if __name__ == "__main__":
         )
     
     elif args.experiment == "two_stream":
+        assert not args.leakage, "Two-stream model not implemented for leakage setup."
         trainset = FrameVideoDataset(leakage=args.leakage, split="train")
         valset = FrameVideoDataset(leakage=args.leakage, split="val")
         
@@ -122,7 +123,7 @@ if __name__ == "__main__":
     
     trainer = Trainer(
         max_epochs=args.epochs,
-        max_steps=500_000, 
+        max_steps=-1, 
         accelerator="gpu", 
         log_every_n_steps=1, 
         callbacks=callbacks,

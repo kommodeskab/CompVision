@@ -195,7 +195,6 @@ class PerFrameClassificationModel(ClassificationModel):
         loss = self.log_loss(loss, 'test')
         return loss
 
-
 class TwoStreamClassificationModel(ClassificationModel):
     def __init__(
         self,
@@ -216,7 +215,7 @@ class TwoStreamClassificationModel(ClassificationModel):
             param.requires_grad = False
             
     def common_step(self, batch : Data, batch_idx : int) -> Data:
-        # do early fusion
+        # do early fusion on the optical flow
         x, y = batch['optical_flow'], batch['target']
         B, T, C, H, W = x.shape
         x = x.view(B, T * C, H, W)
