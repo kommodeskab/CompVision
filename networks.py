@@ -26,7 +26,14 @@ class ResNet18Binary(nn.Module):
         ):
         super().__init__()
         self.model = resnet18(weights=ResNet18_Weights.DEFAULT)
-        self.model.conv1.in_channels = in_channels
+        if in_channels != 3:
+            print(f"Setting in_channels from 3 to {in_channels}...")
+            self.model.conv1 = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=64,
+                kernel_size=7,
+                padding=3,
+                bias=False)
         num_ftrs = self.model.fc.in_features #Number of features in the last layer
         out_features = 1 if num_classes == 2 else num_classes
         self.model.fc = nn.Sequential(
@@ -46,7 +53,7 @@ class ResNet18LateFusion(nn.Module):
     def __init__(
         self,
         num_classes: int = 2,
-        num_frames: int = 8,
+        num_frames: int = 10,
         hidden_size: int = 512,
         fusion: str = "avg",  # 'avg', 'concat', or 'mlp'
     ):
