@@ -16,15 +16,24 @@ class BaseClassifier(nn.Module):
         out = self.linear(x) # don't apply sigmoid here, use BCEWithLogitsLoss
         return out
 
-
 class ResNet18Binary(nn.Module):
     def __init__(
         self, 
         num_classes: int = 2,
+        in_channels: int = 3,
         hidden_size: int = 512,
         ):
         super().__init__()
         self.model = resnet18(weights=ResNet18_Weights.DEFAULT)
+        if in_channels != 3:
+            print(f"Setting in_channels from 3 to {in_channels}...")
+            self.model.conv1 = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=64,
+                kernel_size=7,
+                padding=3,
+                bias=False,
+            )
         num_ftrs = self.model.fc.in_features #Number of features in the last layer
         out_features = 1 if num_classes == 2 else num_classes
         self.model.fc = nn.Sequential(
