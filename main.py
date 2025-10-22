@@ -5,7 +5,7 @@ på den måde kan man lave ændringer som ikke bliver tracket af git
 from dataloader import BaseDM
 from models import ClassificationModel, PerFrameClassificationModel
 from datasets import FrameImageDataset, FrameVideoDataset
-from networks import ResNet18Binary
+from networks import ResNet18Binary, ResNet3D
 from losses import CrossEntropyWithLogitsLoss
 from argparse import ArgumentParser
 from functools import partial
@@ -33,6 +33,7 @@ if __name__ == "__main__":
     argparser.add_argument("--experiment", type=str, required=True, choices=["per_frame", "late_fusion", "early_fusion", "3d_cnn"])
     argparser.add_argument("--num_workers", type=int, default=12)
     argparser.add_argument("--epochs", type=int, default=200)
+    argparser.add_argument("--use_pretrained", type=bool, default=False)
     args = argparser.parse_args()
     
     print("Experiment configuration:")
@@ -57,6 +58,9 @@ if __name__ == "__main__":
         # per_frame trains on individual images, therefore we use FrameImageDataset
         trainset = FrameImageDataset(leakage=args.leakage, split="train")
         valset = FrameImageDataset(leakage=args.leakage, split="val")
+        #size of the input images
+        input_size = trainset[0]["input"].numel()
+        print(f"Input size: {input_size}")
         
         network = ResNet18Binary(
             num_classes=trainset.num_classes,
@@ -69,9 +73,26 @@ if __name__ == "__main__":
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
+    
+    elif args.experiment == "3d_cnn":
+        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
+        valset   = FrameVideoDataset(leakage=args.leakage, split="val")
+
+        #ensure that the input size is correct
+        sample_input = trainset[0]["input"]
+
+        network = ResNet3D(num_classes=trainset.num_classes, freeze_until=None, use_pretrained=args.use_pretrained)
+
+        model = ClassificationModel(
+            network=network,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+        )
+
     else:
         raise NotImplementedError("Experiment type not supported") # TODO
-    
+
     testset = FrameVideoDataset(leakage=args.leakage, split="test")
 
     datamodule = BaseDM(
