@@ -14,7 +14,7 @@ import random
 import numpy as np
 from contextlib import contextmanager
 from losses import BaseLoss
-from utils import DatasetType
+from utils import DatasetType, OptimizerType, LRSchedulerType
     
 Data = Dict[str, Tensor]
 
@@ -45,8 +45,8 @@ def temp_seed(seed : int):
 class BaseLightningModule(pl.LightningModule):
     def __init__(
         self,
-        optimizer : partial[Optimizer] | None = None,
-        lr_scheduler : dict[str, partial[LRScheduler] | str] | None = None,
+        optimizer : OptimizerType = None,
+        lr_scheduler : LRSchedulerType = None,
         ):
         super().__init__()
         
@@ -165,9 +165,20 @@ class ClassificationModel(BaseLightningModule):
         return loss
 
 class PerFrameClassificationModel(ClassificationModel):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        
+    def __init__(
+        self,
+        network: nn.Module,
+        loss_fn: Optional[BaseLoss] = None,
+        optimizer: OptimizerType = None,
+        lr_scheduler: LRSchedulerType = None
+    ):
+        super().__init__(
+            network=network, 
+            loss_fn=loss_fn, 
+            optimizer=optimizer, 
+            lr_scheduler=lr_scheduler
+            )
+
     def test_step(self, batch : Data, batch_idx : int) -> Tensor:
         # test batches are videos of shape (B, T, C, H, W)
         # we will use our image classification model to classify each frame
@@ -183,3 +194,67 @@ class PerFrameClassificationModel(ClassificationModel):
         })
         loss = self.log_loss(loss, 'test')
         return loss
+
+class TwoStreamClassificationModel(ClassificationModel):
+    def __init__(
+        self,
+        network: nn.Module,
+        image_network : nn.Module,
+        loss_fn: Optional[BaseLoss] = None,
+        optimizer: OptimizerType = None,
+        lr_scheduler: LRSchedulerType = None
+    ):
+        super().__init__(
+            network=network,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler
+        )
+        self.image_network = image_network
+        for param in self.image_network.parameters():
+            param.requires_grad = False
+            
+    def common_step(self, batch : Data, batch_idx : int) -> Data:
+        # do early fusion on the optical flow
+        x, y = batch['optical_flow'], batch['target']
+        B, T, C, H, W = x.shape
+        x = x.view(B, T * C, H, W)
+        out = self.forward(x)
+        loss = self.loss_fn({
+            'output': out,
+            'target': y.float()
+        })
+        return loss
+    
+    @property
+    def example_input_array(self):
+        flow = self.trainset[0]['optical_flow'].unsqueeze(0)
+        B, T, C, H, W = flow.shape
+        flow = flow.view(B, T * C, H, W)
+        return flow
+
+    def image_forward(self, x: Tensor) -> Tensor:
+        return self.image_network(x)
+
+    def test_step(self, batch: Data, batch_idx: int) -> Tensor:
+        flow, video, target = batch['optical_flow'], batch['input'], batch['target']
+        
+        # use image network to predict on all the images in the video
+        B, T, *rest = video.shape
+        video = video.view(-1, *rest)
+        img_pred = self.image_forward(video)
+        img_pred = img_pred.view(B, T, -1).mean(dim=1)
+
+        # predict on optical flow using early fusion
+        B, T, C, H, W = flow.shape
+        flow = flow.view(B, T * C, H, W)
+        flow_pred = self.forward(flow)
+
+        # final prediction is a mean
+        final_prediction = (img_pred + flow_pred) / 2
+        
+        loss = self.loss_fn({
+            'output': final_prediction,
+            'target': target.float()
+        })
+        return self.log_loss(loss, 'test')

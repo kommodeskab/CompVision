@@ -3,7 +3,7 @@ kopier nedenstående ind i en ny fil og kald den "playground.py"
 på den måde kan man lave ændringer som ikke bliver tracket af git
 """
 from dataloader import BaseDM
-from models import ClassificationModel, PerFrameClassificationModel
+from models import ClassificationModel, PerFrameClassificationModel, TwoStreamClassificationModel
 from datasets import FrameImageDataset, FrameVideoDataset
 from networks import ResNet18Binary, ResNet3D
 from losses import CrossEntropyWithLogitsLoss
@@ -27,10 +27,10 @@ from utils import get_timestamp
 
 if __name__ == "__main__":
     argparser = ArgumentParser()
-    argparser.add_argument("--leakage", type=bool, default=False)
+    argparser.add_argument("--leakage", action="store_true", help="enable leakage (default: False)")
     argparser.add_argument("--batch_size", type=int, required=True)
     argparser.add_argument("--optimizer", type=str, required=True, choices=["adamw", "sgd"])
-    argparser.add_argument("--experiment", type=str, required=True, choices=["per_frame", "late_fusion", "early_fusion", "3d_cnn"])
+    argparser.add_argument("--experiment", type=str, required=True, choices=["per_frame", "late_fusion", "early_fusion", "3d_cnn", "two_stream"])
     argparser.add_argument("--num_workers", type=int, default=12)
     argparser.add_argument("--epochs", type=int, default=200)
     argparser.add_argument("--use_pretrained", type=bool, default=False)
@@ -90,8 +90,31 @@ if __name__ == "__main__":
             lr_scheduler=lr_scheduler,
         )
 
-    else:
-        raise NotImplementedError("Experiment type not supported") # TODO
+    
+    elif args.experiment == "two_stream":
+        assert not args.leakage, "Two-stream model not implemented for leakage setup."
+        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
+        valset = FrameVideoDataset(leakage=args.leakage, split="val")
+        
+        network = ResNet18Binary(
+            num_classes=trainset.num_classes,
+            in_channels=18,
+            hidden_size=128,
+        )
+
+        image_network = ResNet18Binary(
+            num_classes=trainset.num_classes,
+            in_channels=3,
+            hidden_size=128,
+        )
+        
+        model = TwoStreamClassificationModel(
+            network=network,
+            image_network=image_network,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler
+        )
 
     testset = FrameVideoDataset(leakage=args.leakage, split="test")
 
@@ -121,9 +144,9 @@ if __name__ == "__main__":
     
     trainer = Trainer(
         max_epochs=args.epochs,
-        max_steps=500_000, 
+        max_steps=-1, 
         accelerator="gpu", 
-        log_every_n_steps=10, 
+        log_every_n_steps=1, 
         callbacks=callbacks,
         check_val_every_n_epoch=1,
         logger=logger,
