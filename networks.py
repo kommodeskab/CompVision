@@ -25,9 +25,11 @@ class ResNet18Binary(nn.Module):
         num_classes: int = 2,
         in_channels: int = 3,
         hidden_size: int = 512,
+        use_pretrained: bool = True,
         ):
         super().__init__()
-        self.model = resnet18(weights=ResNet18_Weights.DEFAULT)
+        weights = ResNet18_Weights.DEFAULT if use_pretrained else None
+        self.model = resnet18(weights=weights)
         if in_channels != 3:
             print(f"Setting in_channels from 3 to {in_channels}...")
             self.model.conv1 = nn.Conv2d(
@@ -54,35 +56,39 @@ class ResNet18Binary(nn.Module):
 
 
 class ResNet3D(nn.Module):
-    def __init__(self, num_classes: int = 10, hidden_size: int = 512, dropout_p: float = 0.5,
-        freeze_until: str | None = "None", use_pretrained: bool = True):
+    def __init__(
+        self, 
+        num_classes: int = 10, 
+        hidden_size: int = 512, 
+        freeze_until: str | None = "None", 
+        use_pretrained: bool = True
+        ):
         super().__init__()
 
         if use_pretrained:
             weights = R3D_18_Weights.DEFAULT
-            self.backbone = r3d_18(weights=weights)
+            self.model = r3d_18(weights=weights)
         else:
-            self.backbone = r3d_18(weights=None)
+            self.model = r3d_18(weights=None)
     
-        feat_dim = self.backbone.fc.in_features
-        self.backbone.fc = nn.Identity()
+        num_ftrs = self.model.fc.in_features
+        self.model.fc = nn.Identity()
+        out_features = 1 if num_classes == 2 else num_classes
 
-        self.head = nn.Sequential(
-            nn.Linear(feat_dim, hidden_size, bias=False),
-            nn.BatchNorm1d(hidden_size),
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=dropout_p),
-            nn.Linear(hidden_size, hidden_size, bias=False),
-            nn.BatchNorm1d(hidden_size),
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=dropout_p),
-            nn.Linear(hidden_size, num_classes),
+        self.model.fc = nn.Sequential(
+            nn.Linear(num_ftrs, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(p=0.5),
+            nn.Linear(hidden_size, out_features)
         )
 
         if freeze_until is not None:
             self._freeze_backbone(until=freeze_until)
 
-        for m in self.head.modules():
+        for m in self.model.fc.modules():
             if isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
 
@@ -90,11 +96,10 @@ class ResNet3D(nn.Module):
         freeze_names = {"layer3": ["stem", "layer1", "layer2"],
                         "layer4": ["stem", "layer1", "layer2", "layer3"],
                         "classifier_only": ["stem", "layer1", "layer2", "layer3", "layer4"]}
-        for name, module in self.backbone.named_children():
+        for name, module in self.model.named_children():
             if until in freeze_names and name in freeze_names[until]:
                 for p in module.parameters(): p.requires_grad = False
 
     def forward(self, x: Tensor) -> Tensor:
         x = x.permute(0, 2, 1, 3, 4) #Change from [B, T, C, H, W] to [B, C, T, H, W]
-        feats = self.backbone(x)
-        return self.head(feats)
+        return self.model(x)

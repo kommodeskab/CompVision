@@ -30,6 +30,7 @@ MANIFEST
 /lightning_logs
 playground.py
 playground.ipynb
+/hpc
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

@@ -114,7 +114,7 @@ class FrameVideoDataset(torch.utils.data.Dataset):
             flows = torch.from_numpy(flows)
         else:
             # there are no optical flows for the dataset with leakage
-            flows = None
+            flows = False
 
         return {
             "input": frames,

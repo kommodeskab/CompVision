@@ -24,6 +24,9 @@ from pytorch_lightning.callbacks import (
 )
 import pytorch_lightning
 from utils import get_timestamp
+from callbacks import SetDropoutProbCallback
+
+HIDDEN_SIZE = 128
 
 if __name__ == "__main__":
     argparser = ArgumentParser()
@@ -34,6 +37,7 @@ if __name__ == "__main__":
     argparser.add_argument("--num_workers", type=int, default=12)
     argparser.add_argument("--epochs", type=int, default=200)
     argparser.add_argument("--use_pretrained", type=bool, default=False)
+    argparser.add_argument("--dropout_prob", type=float, default=0.3)
     args = argparser.parse_args()
     
     print("Experiment configuration:")
@@ -58,13 +62,11 @@ if __name__ == "__main__":
         # per_frame trains on individual images, therefore we use FrameImageDataset
         trainset = FrameImageDataset(leakage=args.leakage, split="train")
         valset = FrameImageDataset(leakage=args.leakage, split="val")
-        #size of the input images
-        input_size = trainset[0]["input"].numel()
-        print(f"Input size: {input_size}")
         
         network = ResNet18Binary(
             num_classes=trainset.num_classes,
-            hidden_size=128,
+            hidden_size=HIDDEN_SIZE,
+            use_pretrained=args.use_pretrained,
         )
         
         model = PerFrameClassificationModel(
@@ -76,12 +78,14 @@ if __name__ == "__main__":
     
     elif args.experiment == "3d_cnn":
         trainset = FrameVideoDataset(leakage=args.leakage, split="train")
-        valset   = FrameVideoDataset(leakage=args.leakage, split="val")
+        valset = FrameVideoDataset(leakage=args.leakage, split="val")
 
-        #ensure that the input size is correct
-        sample_input = trainset[0]["input"]
-
-        network = ResNet3D(num_classes=trainset.num_classes, freeze_until=None, use_pretrained=args.use_pretrained)
+        network = ResNet3D(
+            num_classes=trainset.num_classes, 
+            hidden_size=HIDDEN_SIZE,
+            freeze_until=None, 
+            use_pretrained=args.use_pretrained
+            )
 
         model = ClassificationModel(
             network=network,
@@ -99,13 +103,15 @@ if __name__ == "__main__":
         network = ResNet18Binary(
             num_classes=trainset.num_classes,
             in_channels=18,
-            hidden_size=128,
+            hidden_size=HIDDEN_SIZE,
+            use_pretrained=args.use_pretrained,
         )
 
         image_network = ResNet18Binary(
             num_classes=trainset.num_classes,
             in_channels=3,
-            hidden_size=128,
+            hidden_size=HIDDEN_SIZE,
+            use_pretrained=args.use_pretrained,
         )
         
         model = TwoStreamClassificationModel(
@@ -133,6 +139,7 @@ if __name__ == "__main__":
         LearningRateMonitor(),
         ModelSummary(max_depth=2),
         Timer(),
+        SetDropoutProbCallback(new_prob=args.dropout_prob),
     ]
     
     logger = TensorBoardLogger(

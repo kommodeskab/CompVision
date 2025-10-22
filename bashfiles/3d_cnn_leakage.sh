@@ -13,15 +13,15 @@
 #BSUB -n 12
 
 # gb memory per core
-#BSUB -R "rusage[mem=500MB]"
+#BSUB -R "rusage[mem=1GB]"
 # cores is on the same slot
 #BSUB -R "span[hosts=1]"
 
 # walltime
-#BSUB -W 5:59
+#BSUB -W 1:00
 #BSUB -o hpc/%J.out 
 #BSUB -e hpc/%J.err
 
 module load python3/3.11.9
 source .venv/bin/activate
-python3 main.py --leakage --batch_size=64 --optimizer=adamw --experiment=3d_cnn --num_workers=12 --epochs=200
+python3 main.py --leakage --batch_size=32 --optimizer=adamw --experiment=3d_cnn --num_workers=12 --epochs=-1
