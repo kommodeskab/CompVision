@@ -27,6 +27,7 @@ from utils import get_timestamp
 from callbacks import SetDropoutProbCallback
 
 HIDDEN_SIZE = 128
+VAL_EVERY_N_STEPS = 100
 
 if __name__ == "__main__":
     argparser = ArgumentParser()
@@ -35,7 +36,7 @@ if __name__ == "__main__":
     argparser.add_argument("--optimizer", type=str, required=True, choices=["adamw", "sgd"])
     argparser.add_argument("--experiment", type=str, required=True, choices=["per_frame", "late_fusion", "early_fusion", "3d_cnn", "two_stream"])
     argparser.add_argument("--num_workers", type=int, default=12)
-    argparser.add_argument("--epochs", type=int, default=200)
+    argparser.add_argument("--max_steps", type=int, default=-1)
     argparser.add_argument("--use_pretrained", type=bool, default=False)
     argparser.add_argument("--dropout_prob", type=float, default=0.3)
     args = argparser.parse_args()
@@ -52,8 +53,8 @@ if __name__ == "__main__":
     lr_scheduler = {
         'scheduler': partial(ReduceLROnPlateau, mode='min', factor=0.5, patience=20),
         'monitor': 'val_loss',
-        'interval': 'epoch',
-        'frequency': 1
+        'interval': 'step',
+        'frequency': VAL_EVERY_N_STEPS
     }
     
     loss_fn = CrossEntropyWithLogitsLoss(report_top_k=3)
@@ -83,7 +84,6 @@ if __name__ == "__main__":
         network = ResNet3D(
             num_classes=trainset.num_classes, 
             hidden_size=HIDDEN_SIZE,
-            freeze_until=None, 
             use_pretrained=args.use_pretrained
             )
 
@@ -134,7 +134,7 @@ if __name__ == "__main__":
         
     callbacks = [
         DeviceStatsMonitor(),
-        ModelCheckpoint(monitor='val_accuracy', mode='max', save_top_k=1),
+        ModelCheckpoint(monitor='val_accuracy', mode='max', save_top_k=1, every_n_train_steps=VAL_EVERY_N_STEPS),
         EarlyStopping(monitor='val_accuracy', patience=50, mode='max'), 
         LearningRateMonitor(),
         ModelSummary(max_depth=2),
@@ -150,12 +150,13 @@ if __name__ == "__main__":
         )
     
     trainer = Trainer(
-        max_epochs=args.epochs,
-        max_steps=-1, 
+        max_epochs=-1,
+        max_steps=args.max_steps,
         accelerator="gpu", 
         log_every_n_steps=1, 
         callbacks=callbacks,
-        check_val_every_n_epoch=1,
+        check_val_every_n_epoch=None,
+        val_check_interval=VAL_EVERY_N_STEPS,
         logger=logger,
         )
     

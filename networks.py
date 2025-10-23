@@ -60,7 +60,7 @@ class ResNet3D(nn.Module):
         self, 
         num_classes: int = 10, 
         hidden_size: int = 512, 
-        freeze_until: str | None = "None", 
+        freeze_until: str | None = None, 
         use_pretrained: bool = True
         ):
         super().__init__()

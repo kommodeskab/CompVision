@@ -24,4 +24,4 @@
 
 module load python3/3.11.9
 source .venv/bin/activate
-python3 main.py --leakage --batch_size=32 --optimizer=adamw --experiment=per_frame --num_workers=12 --epochs=-1
+python3 main.py --leakage --batch_size=32 --optimizer=adamw --experiment=per_frame --num_workers=12

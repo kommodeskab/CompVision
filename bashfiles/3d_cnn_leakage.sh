@@ -18,10 +18,10 @@
 #BSUB -R "span[hosts=1]"
 
 # walltime
-#BSUB -W 1:00
+#BSUB -W 5:59
 #BSUB -o hpc/%J.out 
 #BSUB -e hpc/%J.err
 
 module load python3/3.11.9
 source .venv/bin/activate
-python3 main.py --leakage --batch_size=32 --optimizer=adamw --experiment=3d_cnn --num_workers=12 --epochs=-1
+python3 main.py --leakage --batch_size=32 --optimizer=adamw --experiment=3d_cnn --num_workers=12

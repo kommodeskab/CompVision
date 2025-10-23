@@ -9,12 +9,12 @@ from utils import Data
 import torch.nn.functional as F
 import re
 import numpy as np
-
 from torchvision.transforms import v2
 
+IMG_SIZE = 128
+
 train_transform = v2.Compose([
-    v2.Resize(64),
-    v2.RandomCrop(54),
+    v2.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
     v2.RandomVerticalFlip(p=0.05),
     v2.RandomHorizontalFlip(p=0.5),
     v2.RandomRotation(15),
@@ -23,11 +23,10 @@ train_transform = v2.Compose([
 ])
 
 
-
-test_transform = v2.Compose([v2.Resize(64),
-                             v2.ToTensor(),
-    ])
-
+test_transform = v2.Compose([
+    v2.Resize(IMG_SIZE),
+    v2.ToTensor(),
+])
 
 Splits = Literal['train', 'val', 'test']
 
@@ -70,7 +69,6 @@ class FrameImageDataset(torch.utils.data.Dataset):
         frame_path = frame_path.replace('\\','/')
         video_name = frame_path.split('/')[-2]
         video_meta = self._get_meta('video_name', video_name)
-        # print(video_meta)
         label = torch.tensor(video_meta['label'].item())
         target = F.one_hot(label, num_classes=self.num_classes)
         
@@ -79,7 +77,7 @@ class FrameImageDataset(torch.utils.data.Dataset):
         if self.transform:
             frame = self.transform(frame)
         else:
-            frame = T.ToTensor()(frame)
+            frame = self.transform(frame)
 
         return {
             "input": frame,
@@ -126,9 +124,9 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         video_frames = self.load_frames(video_frames_dir)
 
         if self.transform:
-            frames = train_transform(video_frames)
+            frames = self.transform(video_frames)
         else:
-            frames = test_transform(video_frames)
+            frames = self.transform(video_frames)
         
         frames = torch.stack(frames)
         
@@ -166,7 +164,6 @@ if __name__ == "__main__":
     frameimage_dataset = FrameImageDataset(leakage=True,split='train')
     framevideostack_dataset = FrameVideoDataset(leakage=True, split='train')
     framevideolist_dataset = FrameVideoDataset(leakage=True, split='train')
-
 
     frameimage_loader = DataLoader(frameimage_dataset,  batch_size=8, shuffle=False)
     framevideostack_loader = DataLoader(framevideostack_dataset,  batch_size=8, shuffle=False)
