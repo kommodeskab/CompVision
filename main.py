@@ -3,9 +3,9 @@ kopier nedenstående ind i en ny fil og kald den "playground.py"
 på den måde kan man lave ændringer som ikke bliver tracket af git
 """
 from dataloader import BaseDM
-from models import ClassificationModel, PerFrameClassificationModel
+from models import ClassificationModel, PerFrameClassificationModel, EarlyFusionModel, LateFusionModel
 from datasets import FrameImageDataset, FrameVideoDataset
-from networks import ResNet18Binary
+from networks import ResNet18Binary, ResNet18LateFusion
 from losses import CrossEntropyWithLogitsLoss
 from argparse import ArgumentParser
 from functools import partial
@@ -25,9 +25,17 @@ from pytorch_lightning.callbacks import (
 import pytorch_lightning
 from utils import get_timestamp
 
+# 02516sh
+
+# early fusion:
+# python main.py --batch_size=10 --optimizer="adamw" --experiment="early_fusion" --epochs=5
+
+# late fusion:
+# python main.py --batch_size=10 --optimizer="adamw" --experiment="late_fusion" --epochs=5
+
 if __name__ == "__main__":
     argparser = ArgumentParser()
-    argparser.add_argument("--leakage", type=bool, default=False)
+    argparser.add_argument("--leakage", action="store_true")
     argparser.add_argument("--batch_size", type=int, required=True)
     argparser.add_argument("--optimizer", type=str, required=True, choices=["adamw", "sgd"])
     argparser.add_argument("--experiment", type=str, required=True, choices=["per_frame", "late_fusion", "early_fusion", "3d_cnn"])
@@ -54,7 +62,6 @@ if __name__ == "__main__":
     loss_fn = CrossEntropyWithLogitsLoss(report_top_k=3)
     
     if args.experiment == "per_frame":
-        # per_frame trains on individual images, therefore we use FrameImageDataset
         trainset = FrameImageDataset(leakage=args.leakage, split="train")
         valset = FrameImageDataset(leakage=args.leakage, split="val")
         
@@ -69,8 +76,38 @@ if __name__ == "__main__":
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
         )
-    else:
-        raise NotImplementedError("Experiment type not supported") # TODO
+    elif args.experiment == 'early_fusion':
+        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
+        valset = FrameVideoDataset(leakage=args.leakage, split="val")
+        
+        network = ResNet18Binary(
+            num_classes=trainset.num_classes,
+            in_channels = 30,
+            hidden_size=128,
+        )
+        
+        model = EarlyFusionModel(
+            network=network,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+        )
+
+    elif args.experiment == 'late_fusion':
+        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
+        valset = FrameVideoDataset(leakage=args.leakage, split="val")
+        
+        network = ResNet18LateFusion(
+            num_classes=trainset.num_classes,
+            hidden_size=128,
+        )
+        
+        model = LateFusionModel(
+            network=network,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+        )
     
     testset = FrameVideoDataset(leakage=args.leakage, split="test")
 

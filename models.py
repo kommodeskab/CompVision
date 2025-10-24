@@ -210,11 +210,14 @@ class EarlyFusionModel(ClassificationModel):
 class LateFusionModel(ClassificationModel):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+    
+    @property
+    def example_input_array(self):
+        x = self.trainset[0]['input'].unsqueeze(0)
+        return x
 
     def common_step(self, batch : Data, batch_idx : int) -> Data:
         x, y = batch['input'], batch['target']
-        B, T, C, H, W = x.shape
-        x = x.view(B, T * C, H, W)
         out = self.forward(x)
         loss = self.loss_fn({
             'output': out,

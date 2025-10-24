@@ -55,7 +55,7 @@ class ResNet18LateFusion(nn.Module):
         num_classes: int = 2,
         num_frames: int = 10,
         hidden_size: int = 512,
-        fusion: str = "avg",  # 'avg', 'concat', or 'mlp'
+        fusion: str = "concat",
     ):
         super().__init__()
         # Load pretrained ResNet backbone
@@ -65,9 +65,6 @@ class ResNet18LateFusion(nn.Module):
         # Remove the classifier head
         self.feature_extractor = nn.Sequential(*list(base_model.children())[:-1])  # up to avgpool
         self.feature_extractor.eval()  # optionally freeze
-        
-        # Define fusion strategy
-        self.fusion = fusion
 
         # Define classifier head (after fusion)
         fusion_input_size = num_ftrs * num_frames
