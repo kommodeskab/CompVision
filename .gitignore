@@ -29,8 +29,11 @@ MANIFEST
 /.vscode
 /lightning_logs
 playground.py
+playground2.py
 playground.ipynb
 /hpc
+main_playground.py
+.cv_venv
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

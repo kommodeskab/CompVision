@@ -3,9 +3,9 @@ kopier nedenstående ind i en ny fil og kald den "playground.py"
 på den måde kan man lave ændringer som ikke bliver tracket af git
 """
 from dataloader import BaseDM
-from models import ClassificationModel, PerFrameClassificationModel, TwoStreamClassificationModel
+from models import ClassificationModel, PerFrameClassificationModel, TwoStreamClassificationModel, EarlyFusionModel, LateFusionModel
 from datasets import FrameImageDataset, FrameVideoDataset
-from networks import ResNet18Binary, ResNet3D
+from networks import ResNet18Binary, ResNet3D, ResNet18LateFusion
 from losses import CrossEntropyWithLogitsLoss
 from argparse import ArgumentParser
 from functools import partial
@@ -61,7 +61,6 @@ if __name__ == "__main__":
     loss_fn = CrossEntropyWithLogitsLoss(report_top_k=3)
     
     if args.experiment == "per_frame":
-        # per_frame trains on individual images, therefore we use FrameImageDataset
         trainset = FrameImageDataset(leakage=args.leakage, split="train")
         valset = FrameImageDataset(leakage=args.leakage, split="val")
         
@@ -120,6 +119,39 @@ if __name__ == "__main__":
             lr_scheduler=lr_scheduler
         )
 
+    elif args.experiment == 'early_fusion':
+        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
+        valset = FrameVideoDataset(leakage=args.leakage, split="val")
+        
+        network = ResNet18Binary(
+            num_classes=trainset.num_classes,
+            in_channels = 30,
+            hidden_size=HIDDEN_SIZE,
+        )
+        
+        model = EarlyFusionModel(
+            network=network,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+        )
+
+    elif args.experiment == 'late_fusion':
+        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
+        valset = FrameVideoDataset(leakage=args.leakage, split="val")
+        
+        network = ResNet18LateFusion(
+            num_classes=trainset.num_classes,
+            hidden_size=HIDDEN_SIZE,
+        )
+        
+        model = LateFusionModel(
+            network=network,
+            loss_fn=loss_fn,
+            optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+        )
+    
     testset = FrameVideoDataset(leakage=args.leakage, split="test")
 
     datamodule = BaseDM(
