@@ -72,7 +72,6 @@ class ResNet3D(nn.Module):
             self.model = r3d_18(weights=None)
     
         num_ftrs = self.model.fc.in_features
-        self.model.fc = nn.Identity()
         out_features = 1 if num_classes == 2 else num_classes
 
         self.model.fc = nn.Sequential(
@@ -104,54 +103,39 @@ class ResNet3D(nn.Module):
         x = x.permute(0, 2, 1, 3, 4) #Change from [B, T, C, H, W] to [B, C, T, H, W]
         return self.model(x)
 
-        return self.model(x)
-
-class ResNet18LateFusion(nn.Module):
+class ResNet18LateFusion(ResNet18Binary):
     def __init__(
         self,
-        num_classes: int = 2,
+        num_classes: int = 10,
+        in_channels: int = 3,
         num_frames: int = 10,
         hidden_size: int = 512,
-        fusion: str = "concat",
+        use_pretrained: bool = True,
     ):
-        super().__init__()
-        # Load pretrained ResNet backbone
-        base_model = resnet18(weights=ResNet18_Weights.DEFAULT)
-        num_ftrs = base_model.fc.in_features
-        
-        # Remove the classifier head
-        self.feature_extractor = nn.Sequential(*list(base_model.children())[:-1])  # up to avgpool
-        self.feature_extractor.eval()  # optionally freeze
-
-        # Define classifier head (after fusion)
-        fusion_input_size = num_ftrs * num_frames
-        out_features = 1 if num_classes == 2 else num_classes
-
-        self.classifier = nn.Sequential(
-            nn.Linear(fusion_input_size, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(hidden_size, out_features)
+        super().__init__(
+            num_classes=num_classes,
+            in_channels=in_channels,
+            hidden_size=hidden_size,
+            use_pretrained=use_pretrained,
         )
-
-    def forward(self, x):
-        """
-        x: (B, T, 3, H, W)  — batch of videos
-        """
+        out_features = 1 if num_classes == 2 else num_classes
+        self.model.fc = nn.Sequential(
+            nn.Linear(512, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(hidden_size, 10),
+        )
+        self.late_fusion_head = nn.Sequential(
+            nn.Linear(num_frames * 10, hidden_size),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(hidden_size, out_features),
+        )
+        
+    def forward(self, x: Tensor) -> Tensor:
         B, T, C, H, W = x.shape
-
-        # Extract per-frame features
-        x = x.view(B * T, C, H, W)              # flatten frames into batch dimension
-        with no_grad():                   # freeze CNN if desired
-            feats = self.feature_extractor(x)   # (B*T, 512, 1, 1)
-        feats = feats.view(B, T, -1)            # (B, T, 512)
-
-        # Fuse features over time
-        fused = feats.view(B, -1)           # (B, T*512)
-
-        # Classify
-        out = self.classifier(fused)
+        x = x.view(B * T, C, H, W)
+        out = self.model.forward(x)
+        out = out.view(B, -1)
+        out = self.late_fusion_head(out)
         return out

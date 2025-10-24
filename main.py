@@ -3,7 +3,7 @@ kopier nedenstående ind i en ny fil og kald den "playground.py"
 på den måde kan man lave ændringer som ikke bliver tracket af git
 """
 from dataloader import BaseDM
-from models import ClassificationModel, PerFrameClassificationModel, TwoStreamClassificationModel, EarlyFusionModel, LateFusionModel
+from models import ClassificationModel, PerFrameClassificationModel, TwoStreamClassificationModel, EarlyFusionModel
 from datasets import FrameImageDataset, FrameVideoDataset
 from networks import ResNet18Binary, ResNet3D, ResNet18LateFusion
 from losses import CrossEntropyWithLogitsLoss
@@ -127,6 +127,7 @@ if __name__ == "__main__":
             num_classes=trainset.num_classes,
             in_channels = 30,
             hidden_size=HIDDEN_SIZE,
+            use_pretrained=args.use_pretrained,
         )
         
         model = EarlyFusionModel(
@@ -143,9 +144,11 @@ if __name__ == "__main__":
         network = ResNet18LateFusion(
             num_classes=trainset.num_classes,
             hidden_size=HIDDEN_SIZE,
+            in_channels=3,
+            use_pretrained=args.use_pretrained,
         )
         
-        model = LateFusionModel(
+        model = ClassificationModel(
             network=network,
             loss_fn=loss_fn,
             optimizer=optimizer,
