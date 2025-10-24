@@ -203,7 +203,7 @@ class TwoStreamClassificationModel(ClassificationModel):
         loss_fn: Optional[BaseLoss] = None,
         optimizer: OptimizerType = None,
         lr_scheduler: LRSchedulerType = None
-    ):
+    ):            
         super().__init__(
             network=network,
             loss_fn=loss_fn,
@@ -211,9 +211,7 @@ class TwoStreamClassificationModel(ClassificationModel):
             lr_scheduler=lr_scheduler
         )
         self.image_network = image_network
-        for param in self.image_network.parameters():
-            param.requires_grad = False
-            
+
     def common_step(self, batch : Data, batch_idx : int) -> Data:
         # do early fusion on the optical flow
         x, y = batch['optical_flow'], batch['target']

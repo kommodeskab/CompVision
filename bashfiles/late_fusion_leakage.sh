@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # SET JOB NAME
-#BSUB -J late_fusion_leakage
+#BSUB -J lf_leakage
 
 # select gpu, choose gpuv100, gpua100 or p1 (h100)
 #BSUB -q gpuv100
@@ -18,10 +18,10 @@
 #BSUB -R "span[hosts=1]"
 
 # walltime
-#BSUB -W 5:59
+#BSUB -W 12:00
 #BSUB -o hpc/%J.out 
 #BSUB -e hpc/%J.err
 
 module load python3/3.11.9
 source .venv/bin/activate
-python3 main.py --leakage --batch_size=32 --optimizer=adamw --experiment=late_fusion --num_workers=12 --epochs=-1
+python3 main.py --leakage --batch_size=32 --optimizer=adamw --experiment=late_fusion --num_workers=12 --run_name=leakage

@@ -3,8 +3,7 @@ import os
 import pandas as pd
 from PIL import Image
 import torch
-from torchvision import transforms as T
-from typing import Optional, Literal
+from typing import Literal
 from utils import Data
 import torch.nn.functional as F
 import re
@@ -22,6 +21,13 @@ train_transform = v2.Compose([
     v2.ToTensor(),
 ])
 
+optical_flow_transform = v2.Compose([
+    v2.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
+    v2.RandomVerticalFlip(p=0.05),
+    v2.RandomHorizontalFlip(p=0.5),
+    v2.RandomRotation(15),
+    v2.ToTensor(),
+])
 
 test_transform = v2.Compose([
     v2.Resize(IMG_SIZE),
@@ -52,11 +58,7 @@ class FrameImageDataset(torch.utils.data.Dataset):
         self.label_to_action = self.df.set_index('label')['action'].to_dict()
         self.num_classes = len(self.label_to_action)
         self.split = split
-
-        if split == 'train':
-            self.transform = train_transform
-        else:
-            self.transform = test_transform
+        self.transform = train_transform if split == 'train' else test_transform
        
     def __len__(self) -> int:
         return len(self.frame_paths)
@@ -73,11 +75,7 @@ class FrameImageDataset(torch.utils.data.Dataset):
         target = F.one_hot(label, num_classes=self.num_classes)
         
         frame = Image.open(frame_path).convert("RGB")
-
-        if self.transform:
-            frame = self.transform(frame)
-        else:
-            frame = self.transform(frame)
+        frame = self.transform(frame)
 
         return {
             "input": frame,
@@ -98,11 +96,8 @@ class FrameVideoDataset(torch.utils.data.Dataset):
         self.label_to_action = self.df.set_index('label')['action'].to_dict()
         self.num_classes = len(self.label_to_action)
         self.split = split
-
-        if split == 'train':
-            self.transform = train_transform
-        else:
-            self.transform = test_transform        
+        self.transform = train_transform if split == 'train' else test_transform
+        self.optical_flow_transform = optical_flow_transform if split == 'train' else test_transform
 
         self.n_sampled_frames = 10
 
@@ -122,11 +117,7 @@ class FrameVideoDataset(torch.utils.data.Dataset):
 
         video_frames_dir = self.video_paths[idx].split('.avi')[0].replace('videos', 'frames')
         video_frames = self.load_frames(video_frames_dir)
-
-        if self.transform:
-            frames = self.transform(video_frames)
-        else:
-            frames = self.transform(video_frames)
+        frames = self.transform(video_frames)
         
         frames = torch.stack(frames)
         
@@ -138,6 +129,7 @@ class FrameVideoDataset(torch.utils.data.Dataset):
             flow_files = sorted(flow_files, key=extract_numbers)
             flows = np.stack([np.load(f) for f in flow_files])
             flows = torch.from_numpy(flows)
+            flows = self.optical_flow_transform(flows)
         else:
             # there are no optical flows for the dataset with leakage
             flows = False
@@ -157,14 +149,3 @@ class FrameVideoDataset(torch.utils.data.Dataset):
             frames.append(frame)
 
         return frames
-    
-if __name__ == "__main__":
-    from torch.utils.data import DataLoader
-
-    frameimage_dataset = FrameImageDataset(leakage=True,split='train')
-    framevideostack_dataset = FrameVideoDataset(leakage=True, split='train')
-    framevideolist_dataset = FrameVideoDataset(leakage=True, split='train')
-
-    frameimage_loader = DataLoader(frameimage_dataset,  batch_size=8, shuffle=False)
-    framevideostack_loader = DataLoader(framevideostack_dataset,  batch_size=8, shuffle=False)
-    framevideolist_loader = DataLoader(framevideolist_dataset,  batch_size=8, shuffle=False)

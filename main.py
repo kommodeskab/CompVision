@@ -23,7 +23,7 @@ from pytorch_lightning.callbacks import (
     ModelCheckpoint,
 )
 import pytorch_lightning
-from utils import get_timestamp
+from utils import get_timestamp, load_pretrained_per_frame_model
 from callbacks import SetDropoutProbCallback
 
 HIDDEN_SIZE = 128
@@ -39,6 +39,7 @@ if __name__ == "__main__":
     argparser.add_argument("--max_steps", type=int, default=-1)
     argparser.add_argument("--use_pretrained", type=bool, default=False)
     argparser.add_argument("--dropout_prob", type=float, default=0.3)
+    argparser.add_argument("--run_name", type=str, required=False, default=None)
     args = argparser.parse_args()
     
     print("Experiment configuration:")
@@ -100,6 +101,7 @@ if __name__ == "__main__":
         trainset = FrameVideoDataset(leakage=args.leakage, split="train")
         valset = FrameVideoDataset(leakage=args.leakage, split="val")
         
+        # for optical flow classification
         network = ResNet18Binary(
             num_classes=trainset.num_classes,
             in_channels=18,
@@ -107,12 +109,8 @@ if __name__ == "__main__":
             use_pretrained=args.use_pretrained,
         )
 
-        image_network = ResNet18Binary(
-            num_classes=trainset.num_classes,
-            in_channels=3,
-            hidden_size=HIDDEN_SIZE,
-            use_pretrained=args.use_pretrained,
-        )
+        # for image classification
+        image_network = load_pretrained_per_frame_model(leakage = args.leakage)
         
         model = TwoStreamClassificationModel(
             network=network,
@@ -145,7 +143,7 @@ if __name__ == "__main__":
     logger = TensorBoardLogger(
         'lightning_logs', 
         name=args.experiment, 
-        version=get_timestamp(),
+        version=get_timestamp() if args.run_name is None else args.run_name,
         log_graph=False
         )
     
@@ -158,6 +156,7 @@ if __name__ == "__main__":
         check_val_every_n_epoch=None,
         val_check_interval=VAL_EVERY_N_STEPS,
         logger=logger,
+        max_time="00:11:00:00"  # 11 hours
         )
     
     logger.log_hyperparams(vars(args))
