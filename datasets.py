@@ -1,151 +1,85 @@
-from glob import glob
+from torch.utils.data import Dataset
 import os
-import pandas as pd
-from PIL import Image
+import cv2
 import torch
-from typing import Literal
 from utils import Data
-import torch.nn.functional as F
-import re
-import numpy as np
-from torchvision.transforms import v2
+from typing import Literal
 
-IMG_SIZE = 128
+def train_val_test_split(values: list, fracs: list[float]) -> tuple[list, list, list]:
+    assert sum(fracs) == 1.0, "Fractions must sum to 1.0"
+    n = len(values)
+    n_train = int(fracs[0] * n)
+    n_val = int(fracs[1] * n)
+    train = values[:n_train]
+    val = values[n_train:n_train + n_val]
+    test = values[n_train + n_val:]
+    return train, val, test
 
-train_transform = v2.Compose([
-    v2.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
-    v2.RandomVerticalFlip(p=0.05),
-    v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomRotation(15),
-    v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1),
-    v2.ToTensor(),
-])
+def read_img(path: str):
+    img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = img.astype("float32") / 255.0
+    img = torch.from_numpy(img).permute(2, 0, 1)  # HWC to CHW
+    return img
 
-optical_flow_transform = v2.Compose([
-    v2.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)),
-    v2.RandomVerticalFlip(p=0.05),
-    v2.RandomHorizontalFlip(p=0.5),
-    v2.RandomRotation(15),
-    v2.ToTensor(),
-])
-
-test_transform = v2.Compose([
-    v2.Resize(IMG_SIZE),
-    v2.ToTensor(),
-])
-
-Splits = Literal['train', 'val', 'test']
-
-def extract_numbers(filepath : str) -> int:
-    match = re.search(r'flow_(\d+)_(\d+)\.npy', filepath)
-    if match:
-        return int(match.group(1))
-
-def get_root_dir(leakage: bool = False) -> str:
-    if leakage:
-        return "/dtu/datasets1/02516/ufc10"
-    else:
-        return "/dtu/datasets1/02516/ucf101_noleakage"
-
-class FrameImageDataset(torch.utils.data.Dataset):
-    def __init__(self,
-        leakage : bool = False,
-        split : Splits = 'train'
-    ):  
-        self.root_dir = get_root_dir(leakage)
-        self.frame_paths = sorted(glob(f'{self.root_dir}/frames/{split}/*/*/*.jpg'))
-        self.df = pd.read_csv(f'{self.root_dir}/metadata/{split}.csv')
-        self.label_to_action = self.df.set_index('label')['action'].to_dict()
-        self.num_classes = len(self.label_to_action)
+class PH2Dataset(Dataset):
+    def __init__(self, split: Literal['train', 'val', 'test']):
+        super().__init__()
         self.split = split
-        self.transform = train_transform if split == 'train' else test_transform
-       
-    def __len__(self) -> int:
-        return len(self.frame_paths)
-
-    def _get_meta(self, attr: str, value: str) -> pd.DataFrame:
-        return self.df.loc[self.df[attr] == value]
-
-    def __getitem__(self, idx: int) -> Data:
-        frame_path = self.frame_paths[idx]
-        frame_path = frame_path.replace('\\','/')
-        video_name = frame_path.split('/')[-2]
-        video_meta = self._get_meta('video_name', video_name)
-        label = torch.tensor(video_meta['label'].item())
-        target = F.one_hot(label, num_classes=self.num_classes)
+        self.root = "/dtu/datasets1/02516/PH2_Dataset_images"
+        image_names = os.listdir(self.root)
+        train, val, test = train_val_test_split(image_names, [0.8, 0.1, 0.1])
+        if split == 'train':
+            self.image_names = train
+        elif split == 'val':
+            self.image_names = val
+        elif split == 'test':
+            self.image_names = test
         
-        frame = Image.open(frame_path).convert("RGB")
-        frame = self.transform(frame)
-
+    def __len__(self):
+        return len(self.image_names)
+    
+    def __getitem__(self, idx: int) -> Data:
+        img_name = self.image_names[idx]
+        img_path = f'{self.root}/{img_name}/{img_name}_Dermoscopic_Image/{img_name}.bmp'
+        lesion_path = f'{self.root}/{img_name}/{img_name}_lesion/{img_name}_lesion.bmp'
+        input = read_img(img_path)
+        target = read_img(lesion_path)[0:1, :, :]  # Keep only one channel for mask
         return {
-            "input": frame,
-            "target": target,
-            "label": label
+            'input': input,
+            'target': target
         }
-
-class FrameVideoDataset(torch.utils.data.Dataset):
-    def __init__(
-        self, 
-        leakage : bool = False,
-        split : Splits = 'train'
-    ):
-        self.leakage = leakage
-        self.root_dir = get_root_dir(leakage)
-        self.video_paths = sorted(glob(f'{self.root_dir}/videos/{split}/*/*.avi'))
-        self.df = pd.read_csv(f'{self.root_dir}/metadata/{split}.csv')
-        self.label_to_action = self.df.set_index('label')['action'].to_dict()
-        self.num_classes = len(self.label_to_action)
+        
+        
+class DRIVEDataset(Dataset):
+    def __init__(self, split: Literal['train', 'val', 'test']):
+        super().__init__()
         self.split = split
-        self.transform = train_transform if split == 'train' else test_transform
-        self.optical_flow_transform = optical_flow_transform if split == 'train' else test_transform
-
-        self.n_sampled_frames = 10
-
-    def __len__(self) -> int:
-        return len(self.video_paths)
-
-    def _get_meta(self, attr : str, value : str) -> pd.DataFrame:
-        return self.df.loc[self.df[attr] == value]
-
+        self.root = "/dtu/datasets1/02516/DRIVE"
+        
+        if split == 'train':
+            self.idxs = list(range(22, 41))
+        elif split == 'val':
+            self.idxs = [21]
+        elif split == 'test':
+            self.idxs = list(range(1, 21))
+    
+    def __len__(self):
+        return len(self.idxs)
+    
     def __getitem__(self, idx: int) -> Data:
-        video_path = self.video_paths[idx]
-        video_path = video_path.replace('\\','/')
-        video_name = video_path.split('/')[-1].split('.avi')[0]
-        video_meta = self._get_meta('video_name', video_name)
-        label = torch.tensor(video_meta['label'].item())
-        target = F.one_hot(label, num_classes=self.num_classes)
-
-        video_frames_dir = self.video_paths[idx].split('.avi')[0].replace('videos', 'frames')
-        video_frames = self.load_frames(video_frames_dir)
-        frames = self.transform(video_frames)
+        new_idx = self.idxs[idx]
         
-        frames = torch.stack(frames)
-        
-        # also load optical flows
-        if not self.leakage:
-            flow_path = video_meta.video_path.item()[:-4]
-            flow_path = f"{self.root_dir}/flows/{self.split}/{flow_path}"
-            flow_files = glob(f"{flow_path}/*")
-            flow_files = sorted(flow_files, key=extract_numbers)
-            flows = np.stack([np.load(f) for f in flow_files])
-            flows = torch.from_numpy(flows)
-            flows = self.optical_flow_transform(flows)
-        else:
-            # there are no optical flows for the dataset with leakage
-            flows = False
-
+        if self.split in ['train', 'val']:
+            img_path = f'{self.root}/training/images/{new_idx:02d}_training.tif'
+            mask_path = f'{self.root}/training/1st_manual/{new_idx:02d}_manual1.gif'
+        else: 
+            img_path = f'{self.root}/test/images/{new_idx:02d}_test.tif'
+            mask_path = f'{self.root}/test/1st_manual/{new_idx:02d}_manual1.gif'
+            
+        input = read_img(img_path)
+        target = read_img(mask_path)[0:1, :, :]
         return {
-            "input": frames,
-            "target": target,
-            "label": label,
-            "optical_flow": flows
+            'input': input,
+            'target': target
         }
-
-    def load_frames(self, frames_dir : str) -> list[Image.Image]:
-        frames = []
-        for i in range(1, self.n_sampled_frames + 1):
-            frame_file = os.path.join(frames_dir, f"frame_{i}.jpg")
-            frame = Image.open(frame_file).convert("RGB")
-            frames.append(frame)
-
-        return frames

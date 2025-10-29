@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # SET JOB NAME
-#BSUB -J 3d_no_leakage
+#BSUB -J <your_job_name>
 
 # select gpu, choose gpuv100, gpua100 or p1 (h100)
 #BSUB -q gpuv100
@@ -24,4 +24,4 @@
 
 module load python3/3.11.9
 source .venv/bin/activate
-python3 main.py --batch_size=32 --optimizer=adamw --experiment=3d_cnn --num_workers=12 --run_name=no_leakage
+python3 main.py --<your_arguments>

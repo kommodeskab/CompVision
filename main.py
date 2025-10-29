@@ -3,10 +3,7 @@ kopier nedenstående ind i en ny fil og kald den "playground.py"
 på den måde kan man lave ændringer som ikke bliver tracket af git
 """
 from dataloader import BaseDM
-from models import ClassificationModel, PerFrameClassificationModel, TwoStreamClassificationModel, EarlyFusionModel
-from datasets import FrameImageDataset, FrameVideoDataset
-from networks import ResNet18Binary, ResNet3D, ResNet18LateFusion
-from losses import CrossEntropyWithLogitsLoss
+from models import BaseLightningModule
 from argparse import ArgumentParser
 from functools import partial
 from torch.optim import AdamW, SGD
@@ -23,21 +20,18 @@ from pytorch_lightning.callbacks import (
     ModelCheckpoint,
 )
 import pytorch_lightning
-from utils import get_timestamp, load_pretrained_per_frame_model
-from callbacks import SetDropoutProbCallback
+from utils import get_timestamp
+from callbacks import SetDropoutProbCallback, LogLossCallback, LogGradientsCallback
 
-HIDDEN_SIZE = 128
 VAL_EVERY_N_STEPS = 100
 
 if __name__ == "__main__":
     argparser = ArgumentParser()
-    argparser.add_argument("--leakage", action="store_true", help="enable leakage (default: False)")
     argparser.add_argument("--batch_size", type=int, required=True)
     argparser.add_argument("--optimizer", type=str, required=True, choices=["adamw", "sgd"])
-    argparser.add_argument("--experiment", type=str, required=True, choices=["per_frame", "late_fusion", "early_fusion", "3d_cnn", "two_stream"])
+    argparser.add_argument("--experiment", type=str, required=True, choices=[])
     argparser.add_argument("--num_workers", type=int, default=12)
     argparser.add_argument("--max_steps", type=int, default=-1)
-    argparser.add_argument("--use_pretrained", type=bool, default=False)
     argparser.add_argument("--dropout_prob", type=float, default=0.3)
     argparser.add_argument("--run_name", type=str, required=False, default=None)
     args = argparser.parse_args()
@@ -58,117 +52,15 @@ if __name__ == "__main__":
         'frequency': VAL_EVERY_N_STEPS
     }
     
-    loss_fn = CrossEntropyWithLogitsLoss(report_top_k=3)
-    
-    if args.experiment == "per_frame":
-        trainset = FrameImageDataset(leakage=args.leakage, split="train")
-        valset = FrameImageDataset(leakage=args.leakage, split="val")
-        
-        network = ResNet18Binary(
-            num_classes=trainset.num_classes,
-            hidden_size=HIDDEN_SIZE,
-            use_pretrained=args.use_pretrained,
-        )
-        
-        model = PerFrameClassificationModel(
-            network=network,
-            loss_fn=loss_fn,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-        )
-    
-    elif args.experiment == "3d_cnn":
-        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
-        valset = FrameVideoDataset(leakage=args.leakage, split="val")
+    model: BaseLightningModule = ...
+    datamodule: BaseDM = ...
 
-        network = ResNet3D(
-            num_classes=trainset.num_classes, 
-            hidden_size=HIDDEN_SIZE,
-            use_pretrained=args.use_pretrained
-            )
-
-        model = ClassificationModel(
-            network=network,
-            loss_fn=loss_fn,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-        )
-
-    
-    elif args.experiment == "two_stream":
-        assert not args.leakage, "Two-stream model not implemented for leakage setup."
-        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
-        valset = FrameVideoDataset(leakage=args.leakage, split="val")
-        
-        # for optical flow classification
-        network = ResNet18Binary(
-            num_classes=trainset.num_classes,
-            in_channels=18,
-            hidden_size=HIDDEN_SIZE,
-            use_pretrained=args.use_pretrained,
-        )
-
-        # for image classification
-        image_network = load_pretrained_per_frame_model(leakage = args.leakage)
-        
-        model = TwoStreamClassificationModel(
-            network=network,
-            image_network=image_network,
-            loss_fn=loss_fn,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler
-        )
-
-    elif args.experiment == 'early_fusion':
-        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
-        valset = FrameVideoDataset(leakage=args.leakage, split="val")
-        
-        network = ResNet18Binary(
-            num_classes=trainset.num_classes,
-            in_channels = 30,
-            hidden_size=HIDDEN_SIZE,
-            use_pretrained=args.use_pretrained,
-        )
-        
-        model = EarlyFusionModel(
-            network=network,
-            loss_fn=loss_fn,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-        )
-
-    elif args.experiment == 'late_fusion':
-        trainset = FrameVideoDataset(leakage=args.leakage, split="train")
-        valset = FrameVideoDataset(leakage=args.leakage, split="val")
-        
-        network = ResNet18LateFusion(
-            num_classes=trainset.num_classes,
-            hidden_size=HIDDEN_SIZE,
-            in_channels=3,
-            use_pretrained=args.use_pretrained,
-        )
-        
-        model = ClassificationModel(
-            network=network,
-            loss_fn=loss_fn,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-        )
-    
-    testset = FrameVideoDataset(leakage=args.leakage, split="test")
-
-    datamodule = BaseDM(
-        trainset=trainset,
-        valset=valset,
-        testset=testset,
-        num_workers=args.num_workers,
-        batch_size=args.batch_size
-        )
-        
     callbacks = [
+        LogLossCallback(),
+        LogGradientsCallback(log_every_n_steps=100),
         DeviceStatsMonitor(),
-        ModelCheckpoint(monitor='val_accuracy', mode='max', save_top_k=1, every_n_train_steps=VAL_EVERY_N_STEPS),
-        EarlyStopping(monitor='val_accuracy', patience=50, mode='max'), 
+        ModelCheckpoint(monitor='val_loss', mode='min', save_top_k=1, every_n_train_steps=VAL_EVERY_N_STEPS),
+        EarlyStopping(monitor='val_loss', patience=50, mode='min'), 
         LearningRateMonitor(),
         ModelSummary(max_depth=2),
         Timer(),
