@@ -44,3 +44,78 @@ class CrossEntropyWithLogitsLoss(BaseLoss):
         k = self.report_top_k
         top_k_acc = (output.topk(k, dim=-1).indices == labels.unsqueeze(1)).any(dim=-1).float().mean()
         return {'loss': loss, 'accuracy': accuracy, f'top_{k}_accuracy': top_k_acc}
+    
+class Dice_overlap(BaseLoss):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, batch : Data) -> Data:
+        output, target = batch['output'], batch['target']
+        dice = (2 * (output * target).sum()) / (output.sum() + target.sum() + 1e-8)
+        intersection = (output * target).sum()
+        union = output.sum() + target.sum() - intersection
+        accuracy = intersection / (union + 1e-8)
+        sensitivity = intersection / (target.sum() + 1e-8)
+        specificity = (union - (output.sum() - intersection)) / (union + 1e-8)
+
+        return {'loss': 1 - dice, 'accuracy': accuracy, 'intersection over union': intersection / (union + 1e-8), 'sensitivity': sensitivity, 'specificity': specificity}
+    
+class accuracy(BaseLoss):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, batch : Data) -> Data:
+        output, target = batch['output'], batch['target']
+        dice = (2 * (output * target).sum()) / (output.sum() + target.sum() + 1e-8)
+        intersection = (output * target).sum()
+        union = output.sum() + target.sum() - intersection
+        accuracy = intersection / (union + 1e-8)
+        sensitivity = intersection / (target.sum() + 1e-8)
+        specificity = (union - (output.sum() - intersection)) / (union + 1e-8)
+
+        return {'loss': 1 - accuracy, 'dice': dice, 'intersection over union': intersection / (union + 1e-8), 'sensitivity': sensitivity, 'specificity': specificity}
+    
+class intersection_over_union(BaseLoss):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, batch : Data) -> Data:
+        output, target = batch['output'], batch['target']
+        dice = (2 * (output * target).sum()) / (output.sum() + target.sum() + 1e-8)
+        intersection = (output * target).sum()
+        union = output.sum() + target.sum() - intersection
+        accuracy = intersection / (union + 1e-8)
+        sensitivity = intersection / (target.sum() + 1e-8)
+        specificity = (union - (output.sum() - intersection)) / (union + 1e-8)
+
+        return {'loss': 1 - (intersection / (union + 1e-8)), 'dice': dice, 'accuracy': accuracy, 'sensitivity': sensitivity, 'specificity': specificity}
+    
+class sensitivity(BaseLoss):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, batch : Data) -> Data:
+        output, target = batch['output'], batch['target']
+        dice = (2 * (output * target).sum()) / (output.sum() + target.sum() + 1e-8)
+        intersection = (output * target).sum()
+        union = output.sum() + target.sum() - intersection
+        accuracy = intersection / (union + 1e-8)
+        sensitivity = intersection / (target.sum() + 1e-8)
+        specificity = (union - (output.sum() - intersection)) / (union + 1e-8)
+
+        return {'loss': 1 - sensitivity, 'dice': dice, 'accuracy': accuracy, 'intersection over union': intersection / (union + 1e-8), 'specificity': specificity}
+
+class specificity(BaseLoss):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, batch : Data) -> Data:
+        output, target = batch['output'], batch['target']
+        dice = (2 * (output * target).sum()) / (output.sum() + target.sum() + 1e-8)
+        intersection = (output * target).sum()
+        union = output.sum() + target.sum() - intersection
+        accuracy = intersection / (union + 1e-8)
+        sensitivity = intersection / (target.sum() + 1e-8)
+        specificity = (union - (output.sum() - intersection)) / (union + 1e-8)
+
+        return {'loss': 1 - specificity, 'dice': dice, 'accuracy': accuracy, 'intersection over union': intersection / (union + 1e-8), 'sensitivity': sensitivity}
