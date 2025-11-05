@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch import Tensor
 from torchvision.models.video import r3d_18, R3D_18_Weights
 from torchvision.models import resnet18, ResNet18_Weights
+import segmentation_models_pytorch as smp
 
 class BaseClassifier(nn.Module):
     """
@@ -118,4 +119,20 @@ class CNNAutoEncoder(torch.nn.Module):
     def forward(self, x):
         encoded = self.encoder(x)
         decoded = self.decoder(encoded)
-        return decoded      
+        return decoded
+    
+class UNet(torch.nn.Module):
+    def __init__(self, input_shape, n_classes=2, encoder='resnet34', pretrained=False):
+        super().__init__()
+        in_channels = input_shape[0]
+
+        self.model = smp.Unet(
+            encoder_name=encoder,
+            encoder_weights='imagenet' if pretrained else None,
+            in_channels=in_channels,
+            classes=n_classes,
+        )
+
+    def forward(self, x):
+        x = self.model(x)
+        return x
