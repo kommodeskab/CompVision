@@ -4,6 +4,7 @@ import cv2
 import torch
 from utils import Data
 from typing import Literal
+from torchvision.transforms.functional import resize
 
 def train_val_test_split(values: list, fracs: list[float]) -> tuple[list, list, list]:
     assert sum(fracs) == 1.0, "Fractions must sum to 1.0"
@@ -45,6 +46,8 @@ class PH2Dataset(Dataset):
         lesion_path = f'{self.root}/{img_name}/{img_name}_lesion/{img_name}_lesion.bmp'
         input = read_img(img_path)
         target = read_img(lesion_path)[0:1, :, :]  # Keep only one channel for mask
+        input = resize(input, (572, 765))
+        target = resize(target, (572, 765))
         return {
             'input': input,
             'target': target
@@ -79,6 +82,9 @@ class DRIVEDataset(Dataset):
             
         input = read_img(img_path)
         target = read_img(mask_path)[0:1, :, :]
+        input = resize(input, (584, 565))
+        target = resize(target, (584, 565))
+
         return {
             'input': input,
             'target': target
