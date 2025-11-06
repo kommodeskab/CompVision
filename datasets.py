@@ -23,15 +23,43 @@ def read_img(path: str):
     img = torch.from_numpy(img).permute(2, 0, 1)  # HWC to CHW
     return img
 
+def sample_mask(mask_spec, mask, scale, kernel, padding, intensity, n):
+    mask_down = F.interpolate(mask_spec, scale_factor=1/scale)
+    convolved = F.conv2d(mask_down, kernel, padding=padding)
+    weights = F.interpolate(convolved, size=mask.shape) * mask
+
+    W = weights.squeeze().shape[1]
+
+    weights += abs(weights.min())
+    sampled_idxs = torch.multinomial(weights.flatten()**intensity,num_samples=n)
+    ys = sampled_idxs // W
+    xs = sampled_idxs % W
+    coords = torch.stack((xs, ys), dim=0)
+    return coords
+
+def clicks(mask, n_pos=1, n_neg=1, intensity=7, kernel_size = 17):
+    kernel = torch.ones((1, 1, kernel_size, kernel_size)) / (kernel_size ** 2)
+    padding = kernel_size // 2
+
+    mask_pos = mask.unsqueeze(0).unsqueeze(0)
+    mask_neg = 1 - mask_pos
+    scale = 16
+
+    coords_pos = sample_mask(mask_pos, mask, scale, kernel, padding, intensity, n_pos)
+    coords_neg = sample_mask(mask_neg, 1-mask, scale, kernel, padding, intensity, n_neg)
+    return coords_pos, coords_neg
+    
+
 class PH2Dataset(Dataset):
-    def __init__(self, split: Literal['train', 'val', 'test']):
+    def __init__(self, split: Literal['train', 'train_click', 'val', 'test'], n_pos=1, n_neg=1):
         super().__init__()
         self.split = split
         self.root = "/dtu/datasets1/02516/PH2_Dataset_images"
         image_names = os.listdir(self.root)
         train, val, test = train_val_test_split(image_names, [0.8, 0.1, 0.1])
-        if split == 'train':
+        if split == 'train' or split == 'train_click':
             self.image_names = train
+            self.n_pos, self.n_neg = n_pos, n_neg
         elif split == 'val':
             self.image_names = val
         elif split == 'test':
@@ -48,6 +76,9 @@ class PH2Dataset(Dataset):
         target = read_img(lesion_path)[0:1, :, :]  # Keep only one channel for mask
         input = resize(input, (572, 765))
         target = resize(target, (572, 765))
+        if self.split == 'train_click':
+            pos_clicks, neg_clicks = clicks(target, n_pos=self.n_pos, n_neg=self.n_neg)
+            target = {'positive clicks': pos_clicks, 'negative clicks': neg_clicks}
         return {
             'input': input,
             'target': target
