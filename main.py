@@ -3,7 +3,7 @@ kopier nedenstående ind i en ny fil og kald den "playground.py"
 på den måde kan man lave ændringer som ikke bliver tracket af git
 """
 from dataloader import BaseDM
-from models import BaseLightningModule
+from models import BaseLightningModule, ClassificationModel
 from argparse import ArgumentParser
 from functools import partial
 from torch.optim import AdamW, SGD
@@ -21,15 +21,22 @@ from pytorch_lightning.callbacks import (
 )
 import pytorch_lightning
 from utils import get_timestamp
-from callbacks import SetDropoutProbCallback, LogLossCallback, LogGradientsCallback
+from callbacks import (
+    SetDropoutProbCallback, 
+    LogLossCallback, 
+    LogGradientsCallback,
+    LogPointLossCallback,
+)
+from losses import PointSupervisionLoss, BCELoss
+from networks import UNet
+from datasets import PH2Dataset, DRIVEDataset
 
 VAL_EVERY_N_STEPS = 100
 
 if __name__ == "__main__":
     argparser = ArgumentParser()
     argparser.add_argument("--batch_size", type=int, required=True)
-    argparser.add_argument("--optimizer", type=str, required=True, choices=["adamw", "sgd"])
-    argparser.add_argument("--experiment", type=str, required=True, choices=[])
+    argparser.add_argument("--experiment", type=str, required=True, choices=["test"])
     argparser.add_argument("--num_workers", type=int, default=12)
     argparser.add_argument("--max_steps", type=int, default=-1)
     argparser.add_argument("--dropout_prob", type=float, default=0.3)
@@ -40,10 +47,7 @@ if __name__ == "__main__":
     for key, value in vars(args).items():
         print(f"{key}: {value}")
 
-    if args.optimizer == "sgd":
-        optimizer = partial(SGD, lr=1e-3, momentum=0.9, weight_decay=0.1)
-    elif args.optimizer == "adamw":
-        optimizer = partial(AdamW, lr=1e-4, weight_decay=0.1)
+    optimizer = partial(AdamW, lr=1e-4, weight_decay=0.1)
         
     lr_scheduler = {
         'scheduler': partial(ReduceLROnPlateau, mode='min', factor=0.5, patience=20),
@@ -52,10 +56,28 @@ if __name__ == "__main__":
         'frequency': VAL_EVERY_N_STEPS
     }
     
-    model: BaseLightningModule = ...
-    datamodule: BaseDM = ...
+    train_dataset = DRIVEDataset('train')
+    val_dataset = DRIVEDataset('val')
+    test_dataset = DRIVEDataset('test')
+    loss_fn = BCELoss()
+    network = UNet(input_shape=(3, 584, 565), n_classes=1, pretrained=True)
+
+    model: BaseLightningModule = ClassificationModel(
+        network=network,
+        loss_fn=loss_fn,
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
+    )
+    datamodule: BaseDM = BaseDM(
+        trainset=train_dataset,
+        valset=val_dataset,
+        testset=test_dataset,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+    )
 
     callbacks = [
+        LogPointLossCallback(),
         LogLossCallback(),
         LogGradientsCallback(log_every_n_steps=100),
         DeviceStatsMonitor(),

@@ -1,13 +1,23 @@
 import pytorch_lightning as pl
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler
+from functools import partial
+from losses import BaseLoss
 from torch import Tensor
 import torch
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.utilities import grad_norm
+from pytorch_lightning.utilities import grad_norm
 from dataloader import BaseDM
+import torch.nn as nn
 import random
 import numpy as np
 from contextlib import contextmanager
+from losses import BaseLoss
 from utils import DatasetType, OptimizerType, LRSchedulerType
+from torch.utils.tensorboard import SummaryWriter
+import matplotlib.pyplot as plt
     
 Data = Dict[str, Tensor]
 
@@ -51,6 +61,10 @@ class BaseLightningModule(pl.LightningModule):
         return self.trainer.logger
     
     @property
+    def experiment(self) -> SummaryWriter:
+        return self.logger.experiment
+    
+    @property
     def datamodule(self) -> BaseDM:
         return self.trainer.datamodule
     
@@ -74,18 +88,15 @@ class BaseLightningModule(pl.LightningModule):
         Should return the loss as a dictionary for the given batch.
         The loss dictionary can contain multiply keys for logging, 
         but gradient steps will be taken on the value with the key 'loss'
-        
-        Usually looks something like this:
-        
-            X, y = batch['input'], batch['target']
-            model_output = self.forward(X)
-            loss = self.loss_fn(model_output, y) # this should return a dictionary
-            return loss
-        
-        
         """
         raise NotImplementedError
     
+    def log_image(self, tag: str, img_tensor: Tensor):
+        self.experiment.add_image(tag, img_tensor, self.global_step)
+
+    def add_figure(self, tag: str, figure: plt.Figure):
+        self.experiment.add_figure(tag, figure, self.global_step)
+
     def training_step(self, batch : Data, batch_idx : int) -> Tensor:
         return self.common_step(batch, batch_idx)
 
@@ -110,3 +121,27 @@ class BaseLightningModule(pl.LightningModule):
                 **self.partial_lr_scheduler
             }
         }
+        
+class ClassificationModel(BaseLightningModule):
+    def __init__(
+        self,
+        network: nn.Module,
+        loss_fn: BaseLoss,
+        optimizer : OptimizerType = None,
+        lr_scheduler : LRSchedulerType = None,
+        ):
+        super().__init__(optimizer, lr_scheduler)
+        self.network = network
+        self.loss_fn = loss_fn
+        
+    def forward(self, x: Tensor) -> Tensor:
+        return self.network(x)
+    
+    def common_step(self, batch : Data, batch_idx : int) -> Data:
+        inputs = batch['input']
+        outputs = self.forward(inputs)
+        loss = self.loss_fn.forward({
+            'out': outputs,
+            **batch
+        })
+        return loss

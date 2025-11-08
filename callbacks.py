@@ -1,10 +1,70 @@
 from pytorch_lightning import Callback
 import torch.nn as nn
+from pytorch_lightning import Trainer
 from models import BaseLightningModule
 import pytorch_lightning as pl
 from utils import Data, OptimizerType
 from pytorch_lightning.utilities import grad_norm
+from losses import PointSupervisionLoss
+import matplotlib.pyplot as plt
+import logging
 
+logger = logging.getLogger(__name__)
+
+class LogPointLossCallback(Callback):
+    def __init__(self):
+        """
+        Assuming pl_module uses the PointSupervisionLoss as its loss function,
+        this callback logs the positive and negative points on the pseudo-target images
+        """
+        super().__init__()
+        self.has_logged = False
+        
+    def on_fit_start(self, trainer: pl.Trainer, pl_module: BaseLightningModule) -> None:
+        if not isinstance(pl_module.loss_fn, PointSupervisionLoss):
+            logger.info("LogPointLossCallback: The model's loss function is not PointSupervisionLoss. Disabling this callback.")
+            self.has_logged = True  # disable logging if not using PointSupervisionLoss
+
+    def on_train_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
+        if self.has_logged:
+            return
+
+        # what the model is trained on
+        input = batch['input']
+        target = batch['target']
+        pos_points = batch['pos_points']
+        neg_points = batch['neg_points']
+        
+        # what the loss function generated
+        pseudo_target = outputs['pseudo_target']
+        B = pseudo_target.shape[0]
+        
+        for i in range(B):
+            # make a plot of the pseudo target with the points overlayed
+            pseudo_target_img = pseudo_target[i].squeeze().cpu() # shape (H, W)
+            pos = pos_points[i].cpu() # shape (N, 2)
+            neg = neg_points[i].cpu() # shape (M, 2)
+            fig, ax = plt.subplots()
+            ax.imshow(pseudo_target_img, cmap='gray')
+            for p in pos:
+                ax.plot(p[1], p[0], 'go', label='Positive Point')
+            for n in neg:
+                ax.plot(n[1], n[0], 'ro', label='Negative Point')
+            ax.set_title(f'Batch {trainer.global_step} Sample {i}')
+            pl_module.add_figure(f'Point_Supervision/Batch_{trainer.global_step}_Sample_{i}', fig)
+            plt.close(fig)
+            
+            # make a plot of the input with the real target overlayed
+            input_img = input[i] # shape (C, H, W)
+            target_img = target[i].squeeze().cpu() # shape (H, W)
+            fig, ax = plt.subplots()
+            ax.imshow(input_img.permute(1, 2, 0).cpu()) # shape (H, W, C)
+            ax.imshow(target_img, cmap='jet', alpha=0.5) # overlay target
+            ax.set_title(f'Input with Target Overlay - Batch {trainer.global_step} Sample {i}')
+            pl_module.add_figure(f'Input_Target_Overlay/Batch_{trainer.global_step}_Sample_{i}', fig)
+            plt.close(fig)
+
+        self.has_logged = True
 
 class LogGradientsCallback(Callback):
     def __init__(self, log_every_n_steps: int):
@@ -23,10 +83,10 @@ class LogLossCallback(Callback):
     def on_train_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
         pl_module.log_dict({f'train_{k}': v for k, v in outputs.items() if v.numel() == 1}, prog_bar=True)
         
-    def on_validation_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int, dataloader_idx: int) -> None:
+    def on_validation_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
         pl_module.log_dict({f'val_{k}': v for k, v in outputs.items() if v.numel() == 1}, prog_bar=True)
 
-    def on_test_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int, dataloader_idx: int) -> None:
+    def on_test_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
         pl_module.log_dict({f'test_{k}': v for k, v in outputs.items() if v.numel() == 1}, prog_bar=True)
 
 class SetDropoutProbCallback(Callback):
@@ -47,7 +107,7 @@ class SetDropoutProbCallback(Callback):
                 n_modules += 1
         print(f"Set dropout probability to {new_prob} for {n_modules} modules.", flush=True)
 
-    def on_train_start(self, trainer : pl.Trainer, pl_module : BaseLightningModule):
+    def on_train_start(self, trainer : Trainer, pl_module : BaseLightningModule):
         self.set_dropout_prob(
             pl_module,
             self.new_prob,
