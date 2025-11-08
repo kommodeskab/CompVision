@@ -61,11 +61,11 @@ class DRIVEDataset(Dataset):
         self.root = "/dtu/datasets1/02516/DRIVE"
         
         if split == 'train':
-            self.idxs = list(range(22, 41))
+            self.idxs = list(range(25, 41))
         elif split == 'val':
-            self.idxs = [21]
+            self.idxs = [23, 24]
         elif split == 'test':
-            self.idxs = list(range(1, 21))
+            self.idxs = [21, 22]
     
     def __len__(self):
         return len(self.idxs)
@@ -73,12 +73,8 @@ class DRIVEDataset(Dataset):
     def __getitem__(self, idx: int) -> Data:
         new_idx = self.idxs[idx]
         
-        if self.split in ['train', 'val']:
-            img_path = f'{self.root}/training/images/{new_idx:02d}_training.tif'
-            mask_path = f'{self.root}/training/1st_manual/{new_idx:02d}_manual1.gif'
-        else: 
-            img_path = f'{self.root}/test/images/{new_idx:02d}_test.tif'
-            mask_path = f'{self.root}/test/1st_manual/{new_idx:02d}_manual1.gif'
+        img_path = f'{self.root}/training/images/{new_idx:02d}_training.tif'
+        mask_path = f'{self.root}/training/1st_manual/{new_idx:02d}_manual1.gif'
             
         input = read_img(img_path)
         target = read_img(mask_path)[0:1, :, :]
