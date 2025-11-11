@@ -6,7 +6,7 @@ from dataloader import BaseDM
 from models import BaseLightningModule, ClassificationModel
 from argparse import ArgumentParser
 from functools import partial
-from torch.optim import AdamW, SGD
+from torch.optim import AdamW
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from pytorch_lightning import Trainer
@@ -26,6 +26,8 @@ from callbacks import (
     LogLossCallback, 
     LogGradientsCallback,
     LogPointLossCallback,
+    SegmentationMetricsCallback,
+    VisualizeSegmentationCallback
 )
 from losses import PointSupervisionLoss, BCELoss
 from networks import UNet
@@ -60,7 +62,10 @@ if __name__ == "__main__":
     val_dataset = DRIVEDataset('val')
     test_dataset = DRIVEDataset('test')
     loss_fn = BCELoss()
-    network = UNet(input_shape=(3, 584, 565), n_classes=1, pretrained=True)
+    network = UNet(
+        in_channels=3,
+        out_channels=1,
+    )
 
     model: BaseLightningModule = ClassificationModel(
         network=network,
@@ -77,6 +82,8 @@ if __name__ == "__main__":
     )
 
     callbacks = [
+        VisualizeSegmentationCallback(),
+        SegmentationMetricsCallback(),
         LogPointLossCallback(),
         LogLossCallback(),
         LogGradientsCallback(log_every_n_steps=100),
@@ -89,10 +96,13 @@ if __name__ == "__main__":
         SetDropoutProbCallback(new_prob=args.dropout_prob),
     ]
     
+    version = get_timestamp() if args.run_name is None else args.run_name
+    print(f"Logging to experiment '{args.experiment}' with version '{version}'")
+    
     logger = TensorBoardLogger(
         'lightning_logs', 
         name=args.experiment, 
-        version=get_timestamp() if args.run_name is None else args.run_name,
+        version=version,
         log_graph=False
         )
     
