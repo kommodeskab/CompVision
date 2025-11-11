@@ -98,7 +98,11 @@ class SegmentationMetrics(BaseLoss):
         super().__init__()
         
     def forward(self, batch : Data) -> Data:
-        output, target = batch['output'], batch['target']
+        output, target = batch['out'], batch['target']
+        
+        # the output contains logits, so threshold at 0.0
+        output = (output > 0.0).float().squeeze()
+        
         dice = (2 * (output * target).sum()) / (output.sum() + target.sum() + 1e-8)
         intersection = (output * target).sum()
         union = output.sum() + target.sum() - intersection
