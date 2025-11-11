@@ -8,8 +8,48 @@ from pytorch_lightning.utilities import grad_norm
 from losses import PointSupervisionLoss
 import matplotlib.pyplot as plt
 import logging
+from losses import SegmentationMetrics
 
 logger = logging.getLogger(__name__)
+
+class SegmentationMetricsCallback(Callback):
+    def __init__(self):
+        super().__init__()
+        self.metrics = SegmentationMetrics()
+        
+    def on_validation_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
+        metrics = self.metrics(outputs)
+        pl_module.log_dict({f'val_{k}': v for k, v in metrics.items() if v.numel() == 1}, prog_bar=False)
+        
+    def on_train_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
+        metrics = self.metrics(outputs)
+        pl_module.log_dict({f'train_{k}': v for k, v in metrics.items() if v.numel() == 1}, prog_bar=False)
+    
+    def on_test_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
+        metrics = self.metrics(outputs)
+        pl_module.log_dict({f'test_{k}': v for k, v in metrics.items() if v.numel() == 1}, prog_bar=False)
+
+class VisualizeSegmentationCallback(Callback):
+    def __init__(self):
+        super().__init__()
+    
+    def on_validation_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
+        # plot the first image in the batch alongside the estimated and ground truth masks
+        input_img = batch['input'][0]  # shape (C, H, W)
+        gt_mask = batch['target'][0].squeeze()  # shape (H, W)
+        pred_mask = outputs['out'][0].squeeze()  # shape (H, W)
+        pred_mask = (pred_mask > 0.0).float()  # threshold at 0.0
+
+        fig, ax = plt.subplots(1, 3, figsize=(12, 4))
+        ax: list[plt.Axes]
+        ax[0].imshow(input_img.permute(1, 2, 0).cpu())
+        ax[0].set_title('Input Image')
+        ax[1].imshow(gt_mask.cpu(), cmap='gray')
+        ax[1].set_title('Ground Truth Mask')
+        ax[2].imshow(pred_mask.cpu(), cmap='gray')
+        ax[2].set_title('Predicted Mask')
+        pl_module.add_figure(f'Segmentation_{batch_idx}', fig)
+        plt.close(fig)
 
 class LogPointLossCallback(Callback):
     def __init__(self):
