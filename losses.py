@@ -92,3 +92,24 @@ class PointSupervisionLoss(BaseLoss):
             # also log the pseudo target and points for visualization/debugging
             'pseudo_target': pseudo_target,
         }
+        
+class SegmentationMetrics(BaseLoss):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, batch : Data) -> Data:
+        output, target = batch['output'], batch['target']
+        dice = (2 * (output * target).sum()) / (output.sum() + target.sum() + 1e-8)
+        intersection = (output * target).sum()
+        union = output.sum() + target.sum() - intersection
+        accuracy = intersection / (union + 1e-8)
+        sensitivity = intersection / (target.sum() + 1e-8)
+        specificity = (union - (output.sum() - intersection)) / (union + 1e-8)
+
+        return {
+            'dice': dice, 
+            'accuracy': accuracy,
+            'intersection over union': intersection / (union + 1e-8), 
+            'sensitivity': sensitivity, 
+            'specificity': specificity
+        }
