@@ -61,16 +61,6 @@ class PH2Dataset(Dataset):
         if split == 'train' or split == 'train_click':
             self.image_names = train
             self.n_pos, self.n_neg = n_pos, n_neg
-            if split == 'train_click':
-                self.target_clicks = {}
-                print('Sampling clicks...')
-                for img_name in self.image_names:
-                    lesion_path = f'{self.root}/{img_name}/{img_name}_lesion/{img_name}_lesion.bmp'
-                    target = read_img(lesion_path)[0:1, :, :]  # Keep only one channel for mask
-                    target = resize(target, (572, 765))
-                    pos_clicks, neg_clicks = clicks(target, n_pos=self.n_pos, n_neg=self.n_neg)
-                    self.target_clicks[img_name] = {'positive clicks': pos_clicks, 'negative clicks': neg_clicks}
-
         elif split == 'val':
             self.image_names = val
         elif split == 'test':
@@ -88,7 +78,8 @@ class PH2Dataset(Dataset):
         input = resize(input, (572, 765))
         target = resize(target, (572, 765))
         if self.split == 'train_click':
-            target = self.target_clicks[img_name] # Returns dict of clicks
+            pos_clicks, neg_clicks = clicks(target, n_pos=self.n_pos, n_neg=self.n_neg)
+            target = {'positive clicks': pos_clicks, 'negative clicks': neg_clicks}
         return {
             'input': input,
             'target': target
