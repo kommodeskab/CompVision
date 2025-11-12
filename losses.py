@@ -106,9 +106,9 @@ class SegmentationMetrics(BaseLoss):
         dice = (2 * (output * target).sum()) / (output.sum() + target.sum() + 1e-8)
         intersection = (output * target).sum()
         union = output.sum() + target.sum() - intersection
-        accuracy = intersection / (union + 1e-8)
+        accuracy = ((output == target).float().sum()) / target.numel()
         sensitivity = intersection / (target.sum() + 1e-8)
-        specificity = (union - (output.sum() - intersection)) / (union + 1e-8)
+        specificity = (((1 - output) * (1 - target)).sum()) / ((1 - target).sum() + 1e-8)
 
         return {
             'dice': dice, 
