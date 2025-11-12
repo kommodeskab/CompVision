@@ -47,12 +47,13 @@ def clicks(mask, n_pos=1, n_neg=1, intensity=7, kernel_size = 17):
     scale = 16
 
     coords_pos = sample_mask(mask_pos, mask, scale, kernel, padding, intensity, n_pos)
-    coords_neg = sample_mask(mask_neg, 1-mask, scale, kernel, padding, intensity, n_neg)
+    coords_neg = sample_mask(mask_neg, 1-mask, scale, kernel, padding, intensity*0.7, n_neg)
     return coords_pos, coords_neg
     
 
 class PH2Dataset(Dataset):
-    def __init__(self, split: Literal['train', 'train_click', 'val', 'test'], n_pos=1, n_neg=1):
+    def __init__(self, split: Literal['train', 'train_click', 'val', 'test'],
+                  n_pos=1, n_neg=1, intensity=7):
         super().__init__()
         self.split = split
         self.root = "/dtu/datasets1/02516/PH2_Dataset_images"
@@ -68,7 +69,7 @@ class PH2Dataset(Dataset):
                     lesion_path = f'{self.root}/{img_name}/{img_name}_lesion/{img_name}_lesion.bmp'
                     target = read_img(lesion_path)[0:1, :, :]  # Keep only one channel for mask
                     target = resize(target, (572, 765))
-                    pos_clicks, neg_clicks = clicks(target, n_pos=self.n_pos, n_neg=self.n_neg)
+                    pos_clicks, neg_clicks = clicks(target, n_pos=self.n_pos, n_neg=self.n_neg, intensity=intensity)
                     self.target_clicks[img_name] = {'positive clicks': pos_clicks, 'negative clicks': neg_clicks}
 
         elif split == 'val':
