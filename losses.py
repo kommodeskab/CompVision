@@ -37,14 +37,16 @@ def binary_mask_given_points(
     this function generates a binary mask using the closest point approach.
     The pos_points and neg_points should be tensors of shape (B, N, 2).
     """
+    pos_points = pos_points.float()
+    neg_points = neg_points.float()
     
     grid_y, grid_x = torch.meshgrid(
     torch.arange(height, dtype=torch.float32), 
     torch.arange(width, dtype=torch.float32), 
     indexing='ij'
-)
+    )
     pixel_coords = torch.stack((grid_y, grid_x), dim=-1).reshape(-1, 2)
-    pixel_coords_batched = pixel_coords.unsqueeze(0)
+    pixel_coords_batched = pixel_coords.unsqueeze(0).to(pos_points.device)
     all_dists_pos = torch.cdist(pixel_coords_batched, pos_points, p=2.0)
     all_dists_neg = torch.cdist(pixel_coords_batched, neg_points, p=2.0)
     min_dists_pos, _ = torch.min(all_dists_pos, dim=2)
@@ -62,35 +64,22 @@ class PointSupervisionLoss(BaseLoss):
         
     def forward(self, batch : Data) -> Data:
         out = batch['out'] # shape (B, C, H, W)
-        positie_points = batch['pos_points'] # shape (B, N, 2)
-        negative_points = batch['neg_points'] # shape (B, M, 2)
+        positive_points = batch['pos_clicks'] # shape (B, N, 2)
+        negative_points = batch['neg_clicks'] # shape (B, M, 2)
         # assert that all the points are within the image dimensions
-            
-        assert (
-            torch.all(positie_points[:, :, 0] >= 0) and 
-            torch.all(positie_points[:, :, 0] < out.shape[2]) and
-            torch.all(positie_points[:, :, 1] >= 0) and 
-            torch.all(positie_points[:, :, 1] < out.shape[3]) and
-            torch.all(negative_points[:, :, 0] >= 0) and 
-            torch.all(negative_points[:, :, 0] < out.shape[2]) and
-            torch.all(negative_points[:, :, 1] >= 0) and
-            torch.all(negative_points[:, :, 1] < out.shape[3])
-        ), "Points are out of image bounds"
         
         pseudo_target = binary_mask_given_points(
             height=out.shape[2],
             width=out.shape[3],
-            pos_points=positie_points,
-            neg_points=negative_points
+            pos_points=positive_points,
+            neg_points=negative_points,
         ) # shape (B, H, W)
-
-
+        
         pseudo_target = pseudo_target.unsqueeze(1)  # Add channel dimension
         loss = self.criterion(out, pseudo_target.float())
         
         return {
             'loss': loss,
-            # also log the pseudo target and points for visualization/debugging
             'pseudo_target': pseudo_target,
             **batch
         }

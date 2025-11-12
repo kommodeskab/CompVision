@@ -46,6 +46,9 @@ if __name__ == "__main__":
     argparser.add_argument("--max_steps", type=int, default=-1)
     argparser.add_argument("--dropout_prob", type=float, default=0.3)
     argparser.add_argument("--run_name", type=str, required=False, default=None)
+    argparser.add_argument("--num_pos_clicks", type=int, required=False, default=5)
+    argparser.add_argument("--num_neg_clicks", type=int, required=False, default=5)
+    
     args = argparser.parse_args()
     
     print("Experiment configuration:")
@@ -62,13 +65,15 @@ if __name__ == "__main__":
     }
     
     if args.dataset == 'ph2':
-        train_dataset = PH2Dataset('train')
-        val_dataset = PH2Dataset('val')
-        test_dataset = PH2Dataset('test')
-    else:
+        train_dataset = PH2Dataset('train', n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks)
+        val_dataset = PH2Dataset('val', n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks)
+        test_dataset = PH2Dataset('test', n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks)
+    elif args.dataset == 'drive':
         train_dataset = DRIVEDataset('train')
         val_dataset = DRIVEDataset('val')
         test_dataset = DRIVEDataset('test')
+    else:
+        raise ValueError(f"Unknown dataset: {args.dataset}")
         
     if args.loss == 'point_supervision':
         loss_fn = PointSupervisionLoss()

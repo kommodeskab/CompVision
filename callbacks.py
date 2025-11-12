@@ -42,11 +42,11 @@ class VisualizeSegmentationCallback(Callback):
 
         fig, ax = plt.subplots(1, 3, figsize=(12, 4))
         ax: list[plt.Axes]
-        ax[0].imshow(input_img.permute(1, 2, 0).cpu())
+        ax[0].imshow(input_img.permute(1, 2, 0).cpu().clip(0.0, 1.0))
         ax[0].set_title('Input Image')
-        ax[1].imshow(gt_mask.cpu(), cmap='gray')
+        ax[1].imshow(gt_mask.cpu().clip(0.0, 1.0), cmap='gray')
         ax[1].set_title('Ground Truth Mask')
-        ax[2].imshow(pred_mask.cpu(), cmap='gray')
+        ax[2].imshow(pred_mask.cpu().clip(0.0, 1.0), cmap='gray')
         ax[2].set_title('Predicted Mask')
         pl_module.add_figure(f'Segmentation_{batch_idx}', fig)
         plt.close(fig)
@@ -70,25 +70,32 @@ class LogPointLossCallback(Callback):
             return
 
         # what the model is trained on
-        pos_points = batch['pos_points']
-        neg_points = batch['neg_points']
+        pos_points = batch['pos_clicks']
+        neg_points = batch['neg_clicks']
         
         # what the loss function generated
         pseudo_target = outputs['pseudo_target']
+        real_target = batch['target']
         
-        # make a plot of the pseudo target with the points overlayed
-        pseudo_target_img = pseudo_target[0].squeeze().cpu() # shape (H, W)
-        pos = pos_points[0].cpu() # shape (N, 2)
-        neg = neg_points[0].cpu() # shape (M, 2)
-        fig, ax = plt.subplots()
-        ax.imshow(pseudo_target_img, cmap='gray')
-        for p in pos:
-            ax.plot(p[0], p[1], 'go', label='Positive Point')
-        for n in neg:
-            ax.plot(n[0], n[1], 'ro', label='Negative Point')
-        ax.set_title(f'Clicks and pseudo mask')
-        pl_module.add_figure(f'Point_Supervision_{batch_idx}', fig)
-        plt.close(fig)
+        for i in range(pseudo_target.shape[0]):
+            # make a plot of the pseudo target with the points overlayed
+            pseudo_target_img = pseudo_target[i].squeeze().cpu() # shape (H, W)
+            pos = pos_points[i].cpu() # shape (N, 2)
+            neg = neg_points[i].cpu() # shape (M, 2)
+            fig, ax = plt.subplots(1, 2, figsize=(8, 4))
+            ax: list[plt.Axes]
+            ax[0].imshow(pseudo_target_img.clip(min=0.0, max=1.0), cmap='gray')
+            for p in pos:
+                ax[0].plot(p[1], p[0], 'go', label='Positive clicks')
+            for n in neg:
+                ax[0].plot(n[1], n[0], 'ro', label='Negative clicks')
+            ax[0].set_title(f'Clicks and pseudo mask')
+            
+            ax[1].imshow(real_target[i].squeeze().cpu().clip(min=0.0, max=1.0), cmap='gray')
+            ax[1].set_title('Real Target Mask')
+            
+            pl_module.add_figure(f'Point_Supervision_sample_{i}', fig)
+            plt.close(fig)
         
         self.has_logged = True
 

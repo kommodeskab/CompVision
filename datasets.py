@@ -35,7 +35,8 @@ def sample_mask(mask_spec, mask, scale, kernel, padding, intensity, n):
     sampled_idxs = torch.multinomial(weights.flatten()**intensity,num_samples=n)
     ys = sampled_idxs // W
     xs = sampled_idxs % W
-    coords = torch.stack((xs, ys), dim=0)
+    # stack to tensor of shape (B, 2)
+    coords = torch.stack((ys, xs), dim=1)
     return coords
 
 def clicks(mask, n_pos=1, n_neg=1, intensity=7, kernel_size = 17):
@@ -52,15 +53,16 @@ def clicks(mask, n_pos=1, n_neg=1, intensity=7, kernel_size = 17):
     
 
 class PH2Dataset(Dataset):
-    def __init__(self, split: Literal['train', 'train_click', 'val', 'test'], n_pos=1, n_neg=1):
+    def __init__(self, split: Literal['train', 'val', 'test'], n_pos=1, n_neg=1):
         super().__init__()
         self.split = split
         self.root = "/dtu/datasets1/02516/PH2_Dataset_images"
         image_names = os.listdir(self.root)
         train, val, test = train_val_test_split(image_names, [0.8, 0.1, 0.1])
-        if split == 'train' or split == 'train_click':
+        self.n_pos, self.n_neg = n_pos, n_neg
+        
+        if split == 'train':
             self.image_names = train
-            self.n_pos, self.n_neg = n_pos, n_neg
         elif split == 'val':
             self.image_names = val
         elif split == 'test':
@@ -77,12 +79,13 @@ class PH2Dataset(Dataset):
         target = read_img(lesion_path)[0:1, :, :]  # Keep only one channel for mask
         input = resize(input, (572, 765))
         target = resize(target, (572, 765))
-        if self.split == 'train_click':
-            pos_clicks, neg_clicks = clicks(target, n_pos=self.n_pos, n_neg=self.n_neg)
-            target = {'positive clicks': pos_clicks, 'negative clicks': neg_clicks}
+        pos_clicks, neg_clicks = clicks(target, n_pos=self.n_pos, n_neg=self.n_neg)
+            
         return {
             'input': input,
-            'target': target
+            'target': target,
+            'pos_clicks': pos_clicks,
+            'neg_clicks': neg_clicks
         }
         
         
