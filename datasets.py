@@ -39,7 +39,7 @@ def sample_mask(mask_spec, mask, scale, kernel, padding, intensity, n):
     coords = torch.stack((ys, xs), dim=1)
     return coords
 
-def clicks(mask, n_pos=1, n_neg=1, intensity=7, kernel_size = 17):
+def clicks(mask, n_pos=1, n_neg=1, intensity=8, kernel_size = 21):
     kernel = torch.ones((1, 1, kernel_size, kernel_size)) / (kernel_size ** 2)
     padding = kernel_size // 2
 
@@ -47,9 +47,9 @@ def clicks(mask, n_pos=1, n_neg=1, intensity=7, kernel_size = 17):
     mask_neg = 1 - mask_pos
     scale = 16
 
-    coords_pos = sample_mask(mask_pos, mask, scale, kernel, padding, intensity, n_pos)
-    coords_neg = sample_mask(mask_neg, 1-mask, scale, kernel, padding, intensity, n_neg)
-    return coords_pos, coords_neg
+    coords_pos, weights_pos = sample_mask(mask_pos, mask, scale, kernel, padding, intensity, n_pos)
+    coords_neg, weights_neg = sample_mask(mask_neg, 1-mask, scale, kernel, padding, intensity*0.5, n_neg)
+    return coords_pos, coords_neg, weights_pos, weights_neg
     
 
 class PH2Dataset(Dataset):
