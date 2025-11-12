@@ -30,7 +30,7 @@ from callbacks import (
     VisualizeSegmentationCallback
 )
 from losses import PointSupervisionLoss, BCELoss
-from networks import UNet
+from networks import UNet, CNNAutoEncoder
 from datasets import PH2Dataset, DRIVEDataset
 
 VAL_EVERY_N_STEPS = 100
@@ -39,6 +39,9 @@ if __name__ == "__main__":
     argparser = ArgumentParser()
     argparser.add_argument("--batch_size", type=int, required=True)
     argparser.add_argument("--experiment", type=str, required=True, choices=["test"])
+    argparser.add_argument("--network", type=str, required=True, choices=['unet', 'pretrained_unet', 'cnn'])
+    argparser.add_argument("--dataset", type=str, required=True, choices=['ph2', 'drive'])
+    argparser.add_argument("--loss", type=str, required=False, choices=['bce', 'point_supervision'])
     argparser.add_argument("--num_workers", type=int, default=12)
     argparser.add_argument("--max_steps", type=int, default=-1)
     argparser.add_argument("--dropout_prob", type=float, default=0.3)
@@ -50,22 +53,44 @@ if __name__ == "__main__":
         print(f"{key}: {value}")
 
     optimizer = partial(AdamW, lr=1e-4, weight_decay=0.1)
-        
+    
     lr_scheduler = {
-        'scheduler': partial(ReduceLROnPlateau, mode='min', factor=0.5, patience=20),
+        'scheduler': partial(ReduceLROnPlateau, mode='min', factor=0.5, patience=10),
         'monitor': 'val_loss',
         'interval': 'step',
         'frequency': VAL_EVERY_N_STEPS
     }
     
-    train_dataset = DRIVEDataset('train')
-    val_dataset = DRIVEDataset('val')
-    test_dataset = DRIVEDataset('test')
-    loss_fn = BCELoss()
-    network = UNet(
-        in_channels=3,
-        out_channels=1,
-    )
+    if args.dataset == 'ph2':
+        train_dataset = PH2Dataset('train')
+        val_dataset = PH2Dataset('val')
+        test_dataset = PH2Dataset('test')
+    else:
+        train_dataset = DRIVEDataset('train')
+        val_dataset = DRIVEDataset('val')
+        test_dataset = DRIVEDataset('test')
+        
+    if args.loss == 'point_supervision':
+        loss_fn = PointSupervisionLoss()
+    else:
+        loss_fn = BCELoss()
+    
+    if args.network == 'unet':
+        network = UNet(
+            in_channels=3,
+            out_channels=1,
+        )
+    elif args.network == 'pretrained_unet':
+        network = UNet(
+            in_channels=3,
+            out_channels=1,
+            pretrained=True,
+        )
+    else:
+        network = CNNAutoEncoder(
+            in_channels=3,
+            out_channels=1,
+        )
 
     model: BaseLightningModule = ClassificationModel(
         network=network,
@@ -89,10 +114,9 @@ if __name__ == "__main__":
         LogGradientsCallback(log_every_n_steps=100),
         DeviceStatsMonitor(),
         ModelCheckpoint(monitor='val_loss', mode='min', save_top_k=1, every_n_train_steps=VAL_EVERY_N_STEPS),
-        EarlyStopping(monitor='val_loss', patience=50, mode='min'), 
+        EarlyStopping(monitor='val_loss', patience=20, mode='min'), 
         LearningRateMonitor(),
         ModelSummary(max_depth=2),
-        Timer(),
         SetDropoutProbCallback(new_prob=args.dropout_prob),
     ]
     

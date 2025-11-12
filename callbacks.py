@@ -65,45 +65,31 @@ class LogPointLossCallback(Callback):
             logger.info("LogPointLossCallback: The model's loss function is not PointSupervisionLoss. Disabling this callback.")
             self.has_logged = True  # disable logging if not using PointSupervisionLoss
 
-    def on_train_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
+    def on_validation_batch_end(self, trainer: pl.Trainer, pl_module: BaseLightningModule, outputs: Data, batch: Data, batch_idx: int) -> None:
         if self.has_logged:
             return
 
         # what the model is trained on
-        input = batch['input']
-        target = batch['target']
         pos_points = batch['pos_points']
         neg_points = batch['neg_points']
         
         # what the loss function generated
         pseudo_target = outputs['pseudo_target']
-        B = pseudo_target.shape[0]
         
-        for i in range(B):
-            # make a plot of the pseudo target with the points overlayed
-            pseudo_target_img = pseudo_target[i].squeeze().cpu() # shape (H, W)
-            pos = pos_points[i].cpu() # shape (N, 2)
-            neg = neg_points[i].cpu() # shape (M, 2)
-            fig, ax = plt.subplots()
-            ax.imshow(pseudo_target_img, cmap='gray')
-            for p in pos:
-                ax.plot(p[1], p[0], 'go', label='Positive Point')
-            for n in neg:
-                ax.plot(n[1], n[0], 'ro', label='Negative Point')
-            ax.set_title(f'Batch {trainer.global_step} Sample {i}')
-            pl_module.add_figure(f'Point_Supervision/Batch_{trainer.global_step}_Sample_{i}', fig)
-            plt.close(fig)
-            
-            # make a plot of the input with the real target overlayed
-            input_img = input[i] # shape (C, H, W)
-            target_img = target[i].squeeze().cpu() # shape (H, W)
-            fig, ax = plt.subplots()
-            ax.imshow(input_img.permute(1, 2, 0).cpu()) # shape (H, W, C)
-            ax.imshow(target_img, cmap='jet', alpha=0.5) # overlay target
-            ax.set_title(f'Input with Target Overlay - Batch {trainer.global_step} Sample {i}')
-            pl_module.add_figure(f'Input_Target_Overlay/Batch_{trainer.global_step}_Sample_{i}', fig)
-            plt.close(fig)
-
+        # make a plot of the pseudo target with the points overlayed
+        pseudo_target_img = pseudo_target[0].squeeze().cpu() # shape (H, W)
+        pos = pos_points[0].cpu() # shape (N, 2)
+        neg = neg_points[0].cpu() # shape (M, 2)
+        fig, ax = plt.subplots()
+        ax.imshow(pseudo_target_img, cmap='gray')
+        for p in pos:
+            ax.plot(p[0], p[1], 'go', label='Positive Point')
+        for n in neg:
+            ax.plot(n[0], n[1], 'ro', label='Negative Point')
+        ax.set_title(f'Clicks and pseudo mask')
+        pl_module.add_figure(f'Point_Supervision_{batch_idx}', fig)
+        plt.close(fig)
+        
         self.has_logged = True
 
 class LogGradientsCallback(Callback):
@@ -145,7 +131,7 @@ class SetDropoutProbCallback(Callback):
             if isinstance(module, nn.Dropout):
                 module.p = new_prob
                 n_modules += 1
-        print(f"Set dropout probability to {new_prob} for {n_modules} modules.", flush=True)
+        logger.info(f"Set dropout probability to {new_prob} for {n_modules} modules.")
 
     def on_train_start(self, trainer : Trainer, pl_module : BaseLightningModule):
         self.set_dropout_prob(
