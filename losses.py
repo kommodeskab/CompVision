@@ -2,6 +2,7 @@ import torch.nn as nn
 from utils import Data
 import torch
 
+
 class BaseLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -25,6 +26,27 @@ class BCELoss(BaseLoss):
             'loss': loss
         }
     
+class FocalLoss(BaseLoss):
+    def __init__(self):
+        super().__init__()
+        self.alpha = 0.25
+        self.gamma = 2.0
+        self.reduction = 'mean'
+
+    def forward(self, batch : Data) -> Data:
+        out = batch['out']
+        target = batch['target']
+        bce_loss = nn.functional.binary_cross_entropy_with_logits(out, target.float(), reduction='none')
+        probas = torch.sigmoid(out)
+        p_t = target * probas + (1 - target) * (1 - probas)
+        alpha_factor = target * self.alpha + (1 - target) * (1 - self.alpha)
+        modulating_factor = (1 - p_t) ** self.gamma
+        focal_loss = alpha_factor * modulating_factor * bce_loss
+        loss = focal_loss.mean()
+        return{
+            'loss': loss
+        }
+
 def binary_mask_given_points(
     height: int, 
     width: int, 
