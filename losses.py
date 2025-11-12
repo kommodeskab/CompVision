@@ -22,7 +22,8 @@ class BCELoss(BaseLoss):
         target = batch['target']
         loss = self.criterion(out, target.float())
         return {
-            'loss': loss
+            'loss': loss,
+            **batch
         }
     
 def binary_mask_given_points(
@@ -91,6 +92,7 @@ class PointSupervisionLoss(BaseLoss):
             'loss': loss,
             # also log the pseudo target and points for visualization/debugging
             'pseudo_target': pseudo_target,
+            **batch
         }
         
 class SegmentationMetrics(BaseLoss):
