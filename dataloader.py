@@ -40,7 +40,7 @@ class BaseDM(pl.LightningDataModule):
         return DataLoader(
             dataset = self.trainset, 
             shuffle = True, 
-            drop_last=True,
+            drop_last = False,
             num_workers=self.num_workers,
             **self.kwargs,
             )
@@ -49,8 +49,8 @@ class BaseDM(pl.LightningDataModule):
         return DataLoader(
             dataset = self.valset, 
             shuffle = False, 
-            drop_last=True,
-            num_workers=self.num_workers,
+            drop_last = False,
+            num_workers = self.num_workers,
             **self.kwargs,
             )
 
@@ -58,7 +58,7 @@ class BaseDM(pl.LightningDataModule):
         return DataLoader(
             dataset = self.testset, 
             shuffle = False, 
-            drop_last=True,
-            num_workers=self.num_workers,
+            drop_last = False,
+            num_workers = self.num_workers,
             **self.kwargs,
             )

@@ -14,9 +14,12 @@ class BaseLoss(nn.Module):
         return self.forward(batch)
     
 class BCELoss(BaseLoss):
-    def __init__(self):
+    def __init__(
+        self,
+        pos_weight: float = 1.0,
+        ):
         super().__init__()
-        self.criterion = nn.BCEWithLogitsLoss()
+        self.criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight))
         
     def forward(self, batch : Data) -> Data:
         out = batch['out']
@@ -45,7 +48,8 @@ class FocalLoss(BaseLoss):
         focal_loss = alpha_factor * modulating_factor * bce_loss
         loss = focal_loss.mean()
         return{
-            'loss': loss
+            'loss': loss,
+            **batch
         }
 
 def binary_mask_given_points(
@@ -114,8 +118,8 @@ class SegmentationMetrics(BaseLoss):
         output, target = batch['out'], batch['target']
         
         # the output contains logits, so threshold at 0.0
-        output = (output > 0.0).float().squeeze()
-        
+        output = (output > 0.0).float()  # shape (B, H, W)
+                
         dice = (2 * (output * target).sum()) / (output.sum() + target.sum() + 1e-8)
         intersection = (output * target).sum()
         union = output.sum() + target.sum() - intersection

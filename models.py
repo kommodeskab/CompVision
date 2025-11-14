@@ -126,7 +126,7 @@ class ClassificationModel(BaseLightningModule):
     def __init__(
         self,
         network: nn.Module,
-        loss_fn: BaseLoss,
+        loss_fn: Optional[BaseLoss],
         optimizer : OptimizerType = None,
         lr_scheduler : LRSchedulerType = None,
         ):

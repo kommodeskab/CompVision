@@ -29,7 +29,7 @@ from callbacks import (
     SegmentationMetricsCallback,
     VisualizeSegmentationCallback
 )
-from losses import PointSupervisionLoss, BCELoss
+from losses import PointSupervisionLoss, BCELoss, FocalLoss
 from networks import UNet, CNNAutoEncoder
 from datasets import PH2Dataset, DRIVEDataset
 
@@ -38,10 +38,11 @@ VAL_EVERY_N_STEPS = 100
 if __name__ == "__main__":
     argparser = ArgumentParser()
     argparser.add_argument("--batch_size", type=int, required=True)
-    argparser.add_argument("--experiment", type=str, required=True, choices=["test"])
+    argparser.add_argument("--experiment", type=str, required=True)
     argparser.add_argument("--network", type=str, required=True, choices=['unet', 'pretrained_unet', 'cnn'])
     argparser.add_argument("--dataset", type=str, required=True, choices=['ph2', 'drive'])
-    argparser.add_argument("--loss", type=str, required=False, choices=['bce', 'point_supervision'])
+    argparser.add_argument("--loss", type=str, required=False, choices=['bce', 'weighted_bce', 'focal', 'point_supervision'])
+    argparser.add_argument("--img_size", type=int, default=512)
     argparser.add_argument("--num_workers", type=int, default=12)
     argparser.add_argument("--max_steps", type=int, default=-1)
     argparser.add_argument("--dropout_prob", type=float, default=0.3)
@@ -65,20 +66,27 @@ if __name__ == "__main__":
     }
     
     if args.dataset == 'ph2':
-        train_dataset = PH2Dataset('train', n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks)
-        val_dataset = PH2Dataset('val', n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks)
-        test_dataset = PH2Dataset('test', n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks)
+        train_dataset = PH2Dataset('train', img_size=args.img_size, n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks)
+        val_dataset = PH2Dataset('val', img_size=args.img_size, n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks)
+        test_dataset = PH2Dataset('test', img_size=args.img_size, n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks)
     elif args.dataset == 'drive':
-        train_dataset = DRIVEDataset('train')
-        val_dataset = DRIVEDataset('val')
-        test_dataset = DRIVEDataset('test')
+        train_dataset = DRIVEDataset('train', img_size=args.img_size)
+        val_dataset = DRIVEDataset('val', img_size=args.img_size)
+        test_dataset = DRIVEDataset('test', img_size=args.img_size)
     else:
         raise ValueError(f"Unknown dataset: {args.dataset}")
         
     if args.loss == 'point_supervision':
         loss_fn = PointSupervisionLoss()
-    else:
+    elif args.loss == 'weighted_bce':
+        pos_weight = 10 if args.dataset == 'drive' else 3
+        loss_fn = BCELoss(pos_weight=pos_weight)
+    elif args.loss == 'bce':
         loss_fn = BCELoss()
+    elif args.loss == 'focal':
+        loss_fn = FocalLoss()
+    else:
+        raise ValueError(f"Unknown loss function: {args.loss}")
     
     if args.network == 'unet':
         network = UNet(
@@ -91,11 +99,13 @@ if __name__ == "__main__":
             out_channels=1,
             pretrained=True,
         )
-    else:
+    elif args.network == 'cnn':
         network = CNNAutoEncoder(
             in_channels=3,
             out_channels=1,
         )
+    else:
+        raise ValueError(f"Unknown network: {args.network}")
 
     model: BaseLightningModule = ClassificationModel(
         network=network,
