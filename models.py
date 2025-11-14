@@ -1,25 +1,18 @@
 import pytorch_lightning as pl
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LRScheduler
-from functools import partial
 from losses import BaseLoss
 from torch import Tensor
 import torch
-from typing import Any, Dict, Optional
+from typing import Any
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.utilities import grad_norm
-from pytorch_lightning.utilities import grad_norm
 from dataloader import BaseDM
 import torch.nn as nn
 import random
 import numpy as np
 from contextlib import contextmanager
 from losses import BaseLoss
-from utils import DatasetType, OptimizerType, LRSchedulerType
+from utils import DatasetType, OptimizerType, LRSchedulerType, Data
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
-    
-Data = Dict[str, Tensor]
 
 @contextmanager
 def temp_seed(seed : int):
@@ -126,7 +119,7 @@ class ClassificationModel(BaseLightningModule):
     def __init__(
         self,
         network: nn.Module,
-        loss_fn: Optional[BaseLoss],
+        loss_fn: BaseLoss,
         optimizer : OptimizerType = None,
         lr_scheduler : LRSchedulerType = None,
         ):
