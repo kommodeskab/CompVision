@@ -1,8 +1,11 @@
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader, random_split, Dataset
+from torch.utils.data import DataLoader, random_split
 import os
 from utils import DatasetType, DataLoaderType
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 def split_dataset(
     train_dataset : DatasetType, 
@@ -33,7 +36,7 @@ class BaseDM(pl.LightningDataModule):
         self.trainset, self.valset = split_dataset(trainset, valset, train_val_split)
         self.testset = testset
         self.num_workers = kwargs.pop("num_workers", os.cpu_count())
-        print(f"Using {self.num_workers} workers for data loading.")
+        logger.info(f"Using {self.num_workers} workers for data loading.")
         self.kwargs = kwargs
 
     def train_dataloader(self) -> DataLoaderType:

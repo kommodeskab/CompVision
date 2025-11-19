@@ -1,15 +1,12 @@
 import pytorch_lightning as pl
-from losses import BaseLoss
 from torch import Tensor
 import torch
 from typing import Any
 from pytorch_lightning.loggers import TensorBoardLogger
 from dataloader import BaseDM
-import torch.nn as nn
 import random
 import numpy as np
 from contextlib import contextmanager
-from losses import BaseLoss
 from utils import DatasetType, OptimizerType, LRSchedulerType, Data
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
@@ -114,27 +111,3 @@ class BaseLightningModule(pl.LightningModule):
                 **self.partial_lr_scheduler
             }
         }
-        
-class ClassificationModel(BaseLightningModule):
-    def __init__(
-        self,
-        network: nn.Module,
-        loss_fn: BaseLoss,
-        optimizer : OptimizerType = None,
-        lr_scheduler : LRSchedulerType = None,
-        ):
-        super().__init__(optimizer, lr_scheduler)
-        self.network = network
-        self.loss_fn = loss_fn
-        
-    def forward(self, x: Tensor) -> Tensor:
-        return self.network(x)
-    
-    def common_step(self, batch : Data, batch_idx : int) -> Data:
-        inputs = batch['input']
-        outputs = self.forward(inputs)
-        loss = self.loss_fn.forward({
-            'out': outputs,
-            **batch
-        })
-        return loss
