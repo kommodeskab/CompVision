@@ -80,7 +80,7 @@ def clicks(mask, n_pos=1, n_neg=1, intensity=8, kernel_size = 21):
     
 
 class PH2Dataset(Dataset):
-    def __init__(self, split: Literal['train', 'val', 'test'], img_size: int, n_pos=1, n_neg=1, intensity: int = 8):
+    def __init__(self, split: Literal['train', 'val', 'test'], img_size: int, n_pos=1, n_neg=1, intensity: int = 8, kernel_size: int = 21):
         super().__init__()
         self.split = split
         self.root = "/dtu/datasets1/02516/PH2_Dataset_images"
@@ -88,6 +88,7 @@ class PH2Dataset(Dataset):
         train, val, test = train_val_test_split(image_names, [0.8, 0.1, 0.1])
         self.n_pos, self.n_neg = n_pos, n_neg
         self.intensity = intensity
+        self.kernel_size = kernel_size
         self.augmenter = AugmentationWrapper(split=split, img_size=img_size)
         
         if split == 'train':
@@ -108,7 +109,7 @@ class PH2Dataset(Dataset):
         target = read_img(lesion_path)[0:1, :, :]  # Keep only one channel for mask
         input, target = self.augmenter(input, target)
         
-        pos_clicks, neg_clicks = clicks(target, n_pos=self.n_pos, n_neg=self.n_neg, intensity=self.intensity)
+        pos_clicks, neg_clicks = clicks(target, n_pos=self.n_pos, n_neg=self.n_neg, intensity=self.intensity, kernel_size=self.kernel_size)
             
         return {
             'input': input,

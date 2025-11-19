@@ -50,6 +50,7 @@ if __name__ == "__main__":
     argparser.add_argument("--num_pos_clicks", type=int, required=False, default=5)
     argparser.add_argument("--num_neg_clicks", type=int, required=False, default=5)
     argparser.add_argument("--intensity", type=int, required=False, default=8)
+    argparser.add_argument("--kernel_size", type=int, required=False, default=10)
     
     args = argparser.parse_args()
     
@@ -67,9 +68,9 @@ if __name__ == "__main__":
     }
     
     if args.dataset == 'ph2':
-        train_dataset = PH2Dataset('train', img_size=args.img_size, n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks, intensity=args.intensity)
-        val_dataset = PH2Dataset('val', img_size=args.img_size, n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks, intensity=args.intensity)
-        test_dataset = PH2Dataset('test', img_size=args.img_size, n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks, intensity=args.intensity)
+        train_dataset = PH2Dataset('train', img_size=args.img_size, n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks, intensity=args.intensity, kernel_size=args.kernel_size)
+        val_dataset = PH2Dataset('val', img_size=args.img_size, n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks, intensity=args.intensity, kernel_size=args.kernel_size)
+        test_dataset = PH2Dataset('test', img_size=args.img_size, n_pos=args.num_pos_clicks, n_neg=args.num_neg_clicks, intensity=args.intensity, kernel_size=args.kernel_size)
     elif args.dataset == 'drive':
         train_dataset = DRIVEDataset('train', img_size=args.img_size)
         val_dataset = DRIVEDataset('val', img_size=args.img_size)

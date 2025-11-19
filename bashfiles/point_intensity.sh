@@ -24,7 +24,9 @@
 
 module load python3/3.11.9
 source .venv/bin/activate
-for intensity in 1 10 20 30 40 50
-do
-    python main.py --batch_size=4 --experiment=intensity --network=unet --dataset=ph2 --loss=point_supervision --img_size=256 --run_name=${intensity}_intensity --num_pos_clicks=10 --num_neg_clicks=10 --max_steps=10000 --intensity=${intensity}
-done
+
+python main.py --batch_size=4 --experiment=intensity --network=unet --dataset=ph2 --loss=point_supervision --img_size=256 --run_name=1_intensity --num_pos_clicks=10 --num_neg_clicks=10 --max_steps=10000 --intensity=1 --kernel_size=10
+python main.py --batch_size=4 --experiment=intensity --network=unet --dataset=ph2 --loss=point_supervision --img_size=256 --run_name=10_intensity --num_pos_clicks=10 --num_neg_clicks=10 --max_steps=10000 --intensity=10 --kernel_size=10
+python main.py --batch_size=4 --experiment=intensity --network=unet --dataset=ph2 --loss=point_supervision --img_size=256 --run_name=20_intensity --num_pos_clicks=10 --num_neg_clicks=10 --max_steps=10000 --intensity=20 --kernel_size=10
+python main.py --batch_size=4 --experiment=intensity --network=unet --dataset=ph2 --loss=point_supervision --img_size=256 --run_name=30_intensity --num_pos_clicks=10 --num_neg_clicks=10 --max_steps=10000 --intensity=30 --kernel_size=10
+python main.py --batch_size=4 --experiment=intensity --network=unet --dataset=ph2 --loss=point_supervision --img_size=256 --run_name=40_intensity --num_pos_clicks=10 --num_neg_clicks=10 --max_steps=10000 --intensity=40 --kernel_size=10
