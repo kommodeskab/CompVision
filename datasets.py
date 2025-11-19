@@ -5,12 +5,12 @@ class proposal_dataset:
     def __init__(self):
         pass
 
-    def SelectiveSearch(image, scale=450, sigma=0.9, min_size=250):
+    def SelectiveSearch(self, image, scale=450, sigma=0.9, min_size=250):
         img_lbl, regions = selectivesearch.selective_search(image, scale=scale, sigma=sigma, min_size=min_size)
         regions = [ [r['rect'][0], r['rect'][1], r['rect'][0] + r['rect'][2], r['rect'][1] + r['rect'][3]] for r in regions ]
         return regions
 
-    def iou(boxA, boxB):
+    def iou(self, boxA, boxB):
         xA = max(boxA[0], boxB[0])
         yA = max(boxA[1], boxB[1])
         xB = min(boxA[2], boxB[2])
@@ -21,12 +21,12 @@ class proposal_dataset:
         iou = interArea / float(boxAArea + boxBArea - interArea)
         return iou
 
-    def eval_of_proposals(proposals:list, true_boxes:list):
+    def eval_of_proposals(self,proposals:list, true_boxes:list):
         iou_scores = []
         for prop in proposals:
             max_iou = 0
             for true_box in true_boxes:
-                current_iou = iou(prop, true_box)
+                current_iou = self.iou(prop, true_box)
                 if current_iou > max_iou:
                     max_iou = current_iou
             iou_scores.append(max_iou)
