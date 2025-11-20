@@ -79,7 +79,6 @@ def MABO(targets, boxes):
         best_overlap = 0
         for box in boxes:
             best_overlap = max(best_overlap, iou(box, t_box))
-        print(best_overlap)
         # Average
         abo[c] += best_overlap / count_dict[c]
 
