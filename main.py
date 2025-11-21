@@ -24,7 +24,12 @@ from callbacks import (
     SetDropoutProbCallback, 
     LogLossCallback, 
     LogGradientsCallback,
+    LogClassBalanceCallback
 )
+from losses import BCELoss
+from models import BoundingBoxClassificationModel
+from networks import ResNet18Binary
+from datasets import PotholeDataset
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,7 +51,7 @@ if __name__ == "__main__":
     for key, value in vars(args).items():
         logger.info(f"{key}: {value}")
         
-    optimizer = partial(AdamW, lr=1e-4, weight_decay=0.1)
+    optimizer = partial(AdamW, lr=5e-5, weight_decay=0.1)
     
     lr_scheduler = {
         'scheduler': partial(ReduceLROnPlateau, mode='min', factor=0.5, patience=10),
@@ -55,10 +60,27 @@ if __name__ == "__main__":
         'frequency': VAL_EVERY_N_STEPS
     }
     
-    model: BaseLightningModule = ...
-    datamodule: BaseDM = ...
+    trainset = PotholeDataset(split='train')
+    valset = PotholeDataset(split='val')
+    loss_fn = BCELoss()
+    network = ResNet18Binary(num_classes = 2)
+    model: BaseLightningModule = BoundingBoxClassificationModel(
+        network=network,
+        loss_fn=loss_fn,
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
+    )
+    datamodule: BaseDM = BaseDM(
+        trainset=trainset,
+        valset=valset,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        persistent_workers=True,
+    )
 
     callbacks = [
+        LogClassBalanceCallback(),
         LogLossCallback(),
         LogGradientsCallback(log_every_n_steps=100),
         DeviceStatsMonitor(),
@@ -70,7 +92,7 @@ if __name__ == "__main__":
     ]
     
     version = get_timestamp() if args.run_name is None else args.run_name
-    print(f"Logging to experiment '{args.experiment}' with version '{version}'")
+    logger.info(f"Logging to experiment '{args.experiment}' with version '{version}'")
     
     tensorboardlogger = TensorBoardLogger(
         'lightning_logs', 

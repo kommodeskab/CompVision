@@ -1,6 +1,7 @@
 import torch.nn as nn
 from utils import Data
 import torch
+import numpy as np
 
 class BaseLoss(nn.Module):
     def __init__(self):
@@ -21,13 +22,10 @@ class BCELoss(BaseLoss):
         self.criterion = nn.BCEWithLogitsLoss(pos_weight=torch.tensor(pos_weight))
         
     def forward(self, batch : Data) -> Data:
-        out = batch['out']
+        out = batch['output']
         target = batch['target']
         loss = self.criterion(out, target.float())
-        return {
-            'loss': loss,
-            **batch
-        }
+        return {'loss': loss, 'bce': loss}
     
 
 def iou(boxA, boxB):

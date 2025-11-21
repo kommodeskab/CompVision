@@ -24,6 +24,7 @@ class BaseDM(pl.LightningDataModule):
         valset : Optional[DatasetType] = None,
         testset : Optional[DatasetType] = None,
         train_val_split : Optional[float] = None,
+        test_batch_size: Optional[int] = None,
         **kwargs
         ):
         """
@@ -38,6 +39,7 @@ class BaseDM(pl.LightningDataModule):
         self.num_workers = kwargs.pop("num_workers", os.cpu_count())
         logger.info(f"Using {self.num_workers} workers for data loading.")
         self.kwargs = kwargs
+        self.test_batch_size = test_batch_size if test_batch_size is not None else kwargs.get("batch_size", 1)
 
     def train_dataloader(self) -> DataLoaderType:
         return DataLoader(
