@@ -111,3 +111,35 @@ class BaseLightningModule(pl.LightningModule):
                 **self.partial_lr_scheduler
             }
         }
+        
+class BoundingBoxClassificationModel(BaseLightningModule):
+    def __init__(
+        self,
+        network: torch.nn.Module,
+        loss_fn: torch.nn.Module,
+        optimizer : OptimizerType = None,
+        lr_scheduler : LRSchedulerType = None,
+    ):
+        super().__init__(optimizer=optimizer, lr_scheduler=lr_scheduler)
+        self.network = network
+        self.loss_fn = loss_fn
+        
+    def forward(self, x: Tensor) -> Tensor:
+        return self.network(x)
+    
+    def common_step(self, batch : Data, batch_idx : int) -> Data:
+        input = batch['input']
+        target = batch['target']
+        output = self.forward(input)
+        loss = self.loss_fn({
+            'output': output,
+            'target': target
+        })
+        return {
+            'output': output,
+            **loss,
+            **batch
+        }
+        
+    def test_step(self, batch : Data, batch_idx : int) -> Tensor:
+        raise NotImplementedError("Test step not implemented yet.")
