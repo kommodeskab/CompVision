@@ -1,6 +1,7 @@
 import torch.nn as nn
 from utils import Data
 import torch
+import numpy as np
 
 class BaseLoss(nn.Module):
     def __init__(self):
