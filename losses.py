@@ -78,10 +78,37 @@ def MABO(targets, boxes):
         best_overlap = 0
         for box in boxes:
             best_overlap = max(best_overlap, iou(box, t_box))
-        print(best_overlap)
         # Average
         abo[c] += best_overlap / count_dict[c]
 
     # Compute MABO
     mabo = sum([a for a in abo.values()]) / len(classes)
     return mabo
+
+def NMS(boxes, iou_threshold=0.2):
+    '''
+    Takes a list of boxes with classes and confidence scores [[x,y,w,h], class, confidence], and returns
+    the boxes after class specific non-max suppression.
+    '''
+    # Group boxes by class
+    boxes_by_class = {}
+    for entry in boxes:
+        cls = entry[1]
+        boxes_by_class.setdefault(cls, []).append(entry)
+
+    final_boxes = []
+    # Perform NMS per class
+    for cls, cls_boxes in boxes_by_class.items():
+        # Sort by confidence descending
+        cls_boxes = sorted(cls_boxes, key=lambda b: b[2], reverse=True)
+        
+        selected = []
+
+        while cls_boxes:
+            best = cls_boxes.pop(0)
+            selected.append(best)
+            cls_boxes = [b for b in cls_boxes if iou(best[0], b[0]) < iou_threshold]
+
+        final_boxes.extend(selected)
+
+    return final_boxes
