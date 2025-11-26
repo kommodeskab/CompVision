@@ -112,3 +112,70 @@ def NMS(boxes, iou_threshold=0.2):
         final_boxes.extend(selected)
 
     return final_boxes
+
+def AP(recalls, precision):
+    precision = np.maximum.accumulate(precision[::-1])[::-1]
+    AP = 0.0
+    for t in np.linspace(0, 1, 11):
+        p = precision[recalls >= t].max() if np.any(recalls >= t) else 0
+        AP += p / 11
+    return AP
+
+def mAP(boxes_conf, targets, iou_threshold=0.5):
+    # Group boxes by class
+    boxes_by_class = {}
+    for entry in boxes_conf:
+        cls = entry[1]
+        boxes_by_class.setdefault(cls, []).append(entry)
+    
+    targets_by_class = {}
+    for entry in targets:
+        cls = entry[1]
+        targets_by_class.setdefault(cls, []).append({"box": entry[0], "detected": False})
+    
+    mAP_list = []
+
+    for cls, gt_boxes in targets_by_class.items():
+
+        proposals = boxes_by_class.get(cls, [])
+        proposals = sorted(proposals, key=lambda b: b[2], reverse=True)
+
+        tp = []
+        fp = []
+
+        for prop in proposals:
+            best_iou = 0
+            best_gt   = None
+
+            # find matching GT box
+            for gt in gt_boxes:
+                iou_val = iou(prop[0], gt["box"])
+                if iou_val > best_iou:
+                    best_iou = iou_val
+                    best_gt  = gt
+            
+            if best_iou >= iou_threshold and best_gt is not None and not best_gt["detected"]:
+                tp.append(1)
+                fp.append(0)
+                best_gt["detected"] = True
+            else:
+                tp.append(0)
+                fp.append(1)
+
+        tp = np.array(tp)
+        fp = np.array(fp)
+
+        if len(tp) == 0:
+            mAP_list.append(0)
+            continue
+
+        TP_cumulative = tp.cumsum()
+        FP_cumulative = fp.cumsum()
+
+        recalls = TP_cumulative / len(gt_boxes)
+        precision = TP_cumulative / (TP_cumulative + FP_cumulative)
+
+        AP_class = AP(recalls, precision)
+        mAP_list.append(AP_class)
+
+    return np.mean(mAP_list)
