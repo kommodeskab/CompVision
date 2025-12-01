@@ -287,7 +287,7 @@ class PotholeDataset(Dataset):
 
         if optimize_flag and split == "train":
             logger.info("Optimizing selective_search hyperparameters on train subset...")
-            best, _ = optimize_selective_search(split="train", n_images=5, iou_thr=self.iou_threshold[1])
+            best, _ = optimize_selective_search(split="train", n_images=self.n_images, iou_thr=self.iou_threshold[1])
             self.scale = best["scale"]
             self.sigma = best["sigma"]
             self.min_size = best["min_size"]
