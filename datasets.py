@@ -12,6 +12,15 @@ import cv2
 import warnings
 import os
 from joblib import Memory
+import random
+from itertools import product
+from typing import Dict, List
+from tqdm import tqdm
+from joblib import Parallel, delayed
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
 
 # selective search gives warnings on floating point images
 # i don't want to look at it anymore
@@ -46,8 +55,8 @@ os.makedirs(cache_dir, exist_ok=True)
 memory = Memory(cache_dir, verbose=0)
 
 @memory.cache
-def compute_selective_search(img: np.ndarray) -> list[tuple[int]]:
-    _, regions = selective_search(img, scale=400, sigma=0.9, min_size=10)
+def compute_selective_search(img: np.ndarray, scale=400, sigma=0.9, min_size=1,) -> list[tuple[int]]:
+    _, regions = selective_search(img, scale=scale, sigma=sigma, min_size=min_size)
     proposals = [region['rect'] for region in regions]
     proposals = [p for p in proposals if p[2] > 3 and p[3] > 3]  # filter small boxes
     proposals = [(x, y, x + w, y + h) for (x, y, w, h) in proposals]
@@ -94,6 +103,164 @@ class BasePotholeDataset(Dataset):
             'bounding_boxes': bounding_boxes
         }
 
+def _eval_single_image(
+    idx: int,
+    base_dataset: BasePotholeDataset,
+    scale: int,
+    sigma: float,
+    min_size: int,
+    iou_thr: float,
+    resize_for_eval: int | None,
+):
+    item = base_dataset[idx]
+    img = item["image"]
+    gt_boxes = item["bounding_boxes"]
+    if len(gt_boxes) == 0:
+        return 0, 0, 0, 0
+    if resize_for_eval is not None:
+        h_orig, w_orig = img.shape[:2]
+        img_resized = cv2.resize(img, (resize_for_eval, resize_for_eval))
+        sx = resize_for_eval / w_orig
+        sy = resize_for_eval / h_orig
+
+        gt_rescaled = []
+        for (xmin, ymin, xmax, ymax) in gt_boxes:
+            xmin_r = int(xmin * sx)
+            xmax_r = int(xmax * sx)
+            ymin_r = int(ymin * sy)
+            ymax_r = int(ymax * sy)
+            gt_rescaled.append((xmin_r, ymin_r, xmax_r, ymax_r))
+
+        img = img_resized
+        gt_boxes = gt_rescaled
+
+    total_gt = len(gt_boxes)
+
+    proposals = compute_selective_search(img, scale=scale, sigma=sigma, min_size=min_size)
+    if len(proposals) == 0:
+        return total_gt, 0, 0, 0
+
+    total_props = len(proposals)
+    proposal_ious = np.array(eval_of_proposals(proposals, gt_boxes))
+    total_foreground = int((proposal_ious >= iou_thr).sum())
+
+    covered_gt = 0
+    for gt in gt_boxes:
+        best_iou_for_gt = max(compute_iou(prop, gt) for prop in proposals)
+        if best_iou_for_gt >= iou_thr:
+            covered_gt += 1
+
+    return total_gt, covered_gt, total_props, total_foreground
+
+def evaluate_params_on_subset(
+    base_dataset: BasePotholeDataset,
+    indices: list[int],
+    scale: int,
+    sigma: float,
+    min_size: int,
+    iou_thr: float = 0.7,
+    resize_for_eval: int | None = 256,
+    n_jobs: int = -1) -> dict[str, float]:
+
+    results = Parallel(n_jobs=n_jobs, prefer="processes")(
+        delayed(_eval_single_image)(idx, base_dataset, scale, sigma, min_size, iou_thr, resize_for_eval,)
+        for idx in indices)
+
+    total_gt = 0
+    total_covered = 0
+    total_props = 0
+    total_foreground = 0
+
+    for gt, covered, props, foreground in results:
+        total_gt += gt
+        total_covered += covered
+        total_props += props
+        total_foreground += foreground
+
+    recall = total_covered / total_gt if total_gt > 0 else 0.0
+    fg_ratio = total_foreground / total_props if total_props > 0 else 0.0
+    avg_props = total_props / len(indices) if len(indices) > 0 else 0.0
+
+    return {
+        "recall": recall,
+        "foreground_ratio": fg_ratio,
+        "avg_props": avg_props,
+        "total_props": total_props,
+    }
+
+
+def optimize_selective_search(split: str = "train",  n_images: int = 5, iou_thr: float = 0.7,):
+    base = BasePotholeDataset(split=split)
+    rng = random.Random(0)
+    all_indices = list(range(len(base)))
+    indices = rng.sample(all_indices, n_images) if n_images < len(all_indices) else all_indices
+
+    scale_values = [100, 200, 300, 400, 500, 600, 700, 800]
+    sigma_values = [0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15, 1.2]
+    min_size_values = [1, 2, 3, 4, 5, 10, 20]
+    results = []
+
+    for scale, sigma, min_size in product(scale_values, sigma_values, min_size_values):
+        metrics = evaluate_params_on_subset(
+            base_dataset=base,
+            indices=indices,
+            scale=scale,
+            sigma=sigma,
+            min_size=min_size,
+            iou_thr=iou_thr,
+            resize_for_eval=256,
+            n_jobs=-1,          
+        )
+        res = {"scale": scale, "sigma": sigma, "min_size": min_size, **metrics}
+        results.append(res)
+        # print(
+        #     f"s={scale}, sig={sigma}, min={min_size} -> "
+        #     f"recall={metrics['recall']:.3f}, "
+        #     f"fg_ratio={metrics['foreground_ratio']:.3f}, "
+        #     f"avg_props={metrics['avg_props']:.1f}"
+        # )
+
+    best = max(results, key=lambda r: (r["recall"], -r["avg_props"]))
+    # print(
+    #     "\nBest params: "
+    #     f"scale={best['scale']}, sigma={best['sigma']}, min_size={best['min_size']}, "
+    #     f"recall={best['recall']:.3f}, fg_ratio={best['foreground_ratio']:.3f}, "
+    #     f"avg_props={best['avg_props']:.1f}"
+    # )
+
+    df = pd.DataFrame(results)
+    df_mean_scale_recall = df.groupby("scale")["recall"].mean().reset_index()
+    df_mean_sigma_recall = df.groupby("sigma")["recall"].mean().reset_index()
+    df_mean_min_size_recall = df.groupby("min_size")["recall"].mean().reset_index()
+
+    plt.figure(figsize=(6, 4))
+    sns.barplot(data=df_mean_scale_recall, x="scale", y="recall")
+    plt.xlabel("Scale")
+    plt.ylabel("Mean recall")
+    plt.title("Mean Recall per Scale value")
+    plt.grid(True, axis="y")
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(6, 4))
+    sns.barplot(data=df_mean_sigma_recall, x="sigma", y="recall")
+    plt.xlabel("Sigma")
+    plt.ylabel("Mean recall")
+    plt.title("Mean Recall per Sigma value")
+    plt.grid(True, axis="y")
+    plt.tight_layout()
+    plt.show()
+
+    plt.figure(figsize=(6, 4))
+    sns.barplot(data=df_mean_min_size_recall, x="min_size", y="recall")
+    plt.xlabel("Min size")
+    plt.ylabel("Mean recall")
+    plt.title("Mean Recall per Min Size value")
+    plt.grid(True, axis="y")
+    plt.tight_layout()
+    plt.show()
+    return best, results
+
 class PotholeDataset(Dataset):
     def __init__(
         self, 
@@ -101,14 +268,34 @@ class PotholeDataset(Dataset):
         iou_threshold: tuple[float] = (0.3, 0.7),
         img_size: int = 64,
         return_metadata: bool = False,
-        ):
+        scale=400, 
+        sigma=0.9, 
+        min_size=1,
+        optimize_flag: bool = False,
+        n_images: int = 20
+    ):
         self.split = split
         self.base_dataset = BasePotholeDataset(split=split)
         self.iou_threshold = iou_threshold
         self.img_size = img_size
         self.return_metadata = return_metadata
         self.p_positive = 0.7
-    
+        self.scale = scale
+        self.sigma = sigma
+        self.min_size = min_size
+        self.n_images = n_images
+
+        if optimize_flag and split == "train":
+            logger.info("Optimizing selective_search hyperparameters on train subset...")
+            best, _ = optimize_selective_search(split="train", n_images=5, iou_thr=self.iou_threshold[1])
+            self.scale = best["scale"]
+            self.sigma = best["sigma"]
+            self.min_size = best["min_size"]
+            logger.info(
+                f"Using optimized selective_search params: "
+                f"scale={self.scale}, sigma={self.sigma}, min_size={self.min_size}"
+            )
+
         if return_metadata:
             logger.warning("Using return_metadata=True will fail when using batch size > 1 in DataLoader.")
     
@@ -121,7 +308,7 @@ class PotholeDataset(Dataset):
         img = data['image']
         bounding_boxes = data['bounding_boxes']
         
-        proposals = compute_selective_search(img)
+        proposals = compute_selective_search(img, self.scale, self.sigma, self.min_size)
         
         assert len(proposals) > 0, f"No proposals found for image with index {idx}."
         
